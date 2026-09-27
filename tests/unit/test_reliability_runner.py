@@ -15,8 +15,8 @@ from app.errors import (
     PlannerError,
 )
 from app.models.events import EventKind, FailureKind
-from app.observability import EventEmitter, InMemoryEventSink
-from app.reliability.runner import Runner, classify
+from app.observability import ConsoleEventSink, EventEmitter, InMemoryEventSink
+from app.reliability.runner import Runner, classify, is_unclassified
 from app.tools.base import Tool
 from app.tools.calculator import CalculatorTool
 from app.tools.failure_simulator import FailureSimulatorTool
@@ -45,6 +45,17 @@ class _NeverTool(Tool[_NeverInput, _NeverOutput]):
 
     async def execute(self, params: _NeverInput) -> _NeverOutput:
         raise PermanentToolError("HTTP 404", tool=self.name)
+
+
+class _BombTool(Tool[_NeverInput, _NeverOutput]):
+    name = "bomb_tool"
+    description = "raises an exception type classify() has no row for"
+    input_model = _NeverInput
+    output_model = _NeverOutput
+    default_timeout_s = 1.0
+
+    async def execute(self, params: _NeverInput) -> _NeverOutput:
+        raise IndexError("list index out of range")
 
 
 def build_runner(
@@ -213,3 +224,46 @@ async def test_permanent_failure_is_not_retried() -> None:
 )
 def test_classify_table(exc: BaseException, expected: FailureKind) -> None:
     assert classify(exc) is expected
+
+
+def test_is_unclassified_only_for_types_outside_the_table() -> None:
+    assert is_unclassified(IndexError("bug")) is True
+    assert is_unclassified(ValueError("bug")) is True
+    assert is_unclassified(ZeroDivisionError("bug")) is True
+    assert is_unclassified(PermanentToolError("404")) is False
+    assert is_unclassified(ConfigurationError("no key")) is False
+    assert is_unclassified(TimeoutError("slow")) is False
+    assert is_unclassified(httpx.ConnectError("refused")) is False
+    assert is_unclassified(ConnectionError("reset")) is False
+
+
+async def test_unrecognized_exception_stays_permanent_but_is_tagged(capsys) -> None:
+    assert classify(IndexError("boom")) is FailureKind.PERMANENT
+
+    events: list[Any] = []
+    delays: list[float] = []
+    emitter = EventEmitter(
+        lambda: FIXED_TIME,
+        sinks=[InMemoryEventSink(events), ConsoleEventSink()],
+    )
+    runner = Runner(Config(), emitter, clock=lambda: FIXED_TIME, sleep=delays.append, rng=zero)
+    result = await runner.call(_BombTool(), step_id="b1", call_ordinal=1, arguments={})
+
+    assert result.success is False
+    assert result.attempts == 1
+    assert delays == []
+    assert result.failure_kind is FailureKind.PERMANENT
+    assert result.unclassified is True
+    assert _kinds(events) == [EventKind.TOOL_STARTED, EventKind.TOOL_FAILED]
+    assert events[1].data == {"unclassified": True, "error_type": "IndexError"}
+    assert (
+        "[WARN] unexpected error type: IndexError in bomb_tool (permanent): "
+        "list index out of range"
+    ) in capsys.readouterr().out
+
+    known_events: list[Any] = []
+    known_runner, _ = build_runner(known_events)
+    known = await known_runner.call(_NeverTool(), step_id="f1", call_ordinal=1, arguments={})
+    assert known.failure_kind is FailureKind.PERMANENT
+    assert known.unclassified is False
+    assert known_events[1].data == {}

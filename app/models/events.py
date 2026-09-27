@@ -31,6 +31,7 @@ class ToolResult(BaseModel):
     output: dict[str, Any] | None = None  # schema-validated output, serialized
     attempts: int = 1                  # runner attempts consumed
     failure_kind: FailureKind | None = None
+    unclassified: bool = False         # D11: exception type matched no classify() row
     error: str | None = None
     duration_ms: int = 0
     started_at: datetime

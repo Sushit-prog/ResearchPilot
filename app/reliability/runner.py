@@ -18,6 +18,13 @@ from app.reliability.timeout import with_timeout
 from app.tools.base import Tool
 
 _RETRIABLE_KINDS = frozenset({FailureKind.TRANSIENT, FailureKind.MALFORMED_OUTPUT})
+_TRANSIENT_TYPES = (
+    TimeoutError,
+    httpx.TimeoutException,
+    httpx.TransportError,
+    ConnectionError,
+    OSError,
+)
 
 SleepFn = Callable[[float], "None | Any"]
 RngFn = Callable[[float, float], float]
@@ -30,13 +37,19 @@ def classify(exc: BaseException) -> FailureKind:
         if exc.failure_kind is not None:
             return exc.failure_kind
         return FailureKind.PERMANENT
-    if isinstance(exc, TimeoutError):
-        return FailureKind.TRANSIENT
-    if isinstance(exc, (httpx.TimeoutException, httpx.TransportError)):
-        return FailureKind.TRANSIENT
-    if isinstance(exc, (ConnectionError, OSError)):
+    if isinstance(exc, _TRANSIENT_TYPES):
         return FailureKind.TRANSIENT
     return FailureKind.PERMANENT
+
+
+def is_unclassified(exc: BaseException) -> bool:
+    """True when the exception type matched no row of classify()'s table.
+
+    Such failures still classify as PERMANENT (never retry-loop on a bug),
+    but the runner tags them so a code bug stays distinguishable from a
+    known permanent failure like a 404 (D11).
+    """
+    return not isinstance(exc, (ResearchPilotError, *_TRANSIENT_TYPES))
 
 
 def is_retriable(exc: BaseException) -> bool:
@@ -123,6 +136,9 @@ class Runner:
 
         def on_failure(attempt_no: int, exc: BaseException) -> None:
             kind = classify(exc)
+            data: dict[str, Any] | None = None
+            if is_unclassified(exc):
+                data = {"unclassified": True, "error_type": type(exc).__name__}
             self._emitter.emit(
                 EventKind.TOOL_FAILED,
                 tool=tool.name,
@@ -130,6 +146,7 @@ class Runner:
                 attempt=attempt_no,
                 status=kind.value,
                 message=str(exc),
+                data=data,
             )
 
         def before_retry(next_attempt: int, exc: BaseException) -> None:
@@ -181,6 +198,7 @@ class Runner:
             success=False,
             attempts=outcome.attempts,
             failure_kind=kind,
+            unclassified=is_unclassified(outcome.error),
             error=str(outcome.error),
             duration_ms=duration_ms,
             started_at=started_at,

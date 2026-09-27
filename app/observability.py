@@ -77,6 +77,12 @@ class ConsoleEventSink:
         if kind is EventKind.RETRY_STARTED:
             return f"[RETRY] {event.tool} attempt {event.attempt}: {event.message or ''}"
         if kind is EventKind.TOOL_FAILED:
+            if event.data.get("unclassified"):
+                error_type = event.data.get("error_type", "unknown")
+                return (
+                    f"[WARN] unexpected error type: {error_type} in {event.tool}"
+                    f" ({event.status}): {event.message or ''}"
+                )
             return f"[WARN] {event.tool} failed ({event.status}): {event.message or ''}"
         if kind is EventKind.TOOL_SUCCEEDED:
             if event.attempt is not None and event.attempt > 1:
