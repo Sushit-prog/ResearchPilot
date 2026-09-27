@@ -423,6 +423,14 @@ def render_markdown(results: Sequence[TaskResult]) -> str:
             "- **Citation presence** — findings whose `evidence_id` resolves in the",
             "  final evidence list and whose `source_url` is either null",
             "  (calculator-derived, counted as cited) or present among evidence URLs.",
+            "  Caveat: citation_presence here measures whether the deterministic",
+            "  pipeline (dedup, filter, synthesis gates) correctly carries valid",
+            "  evidence through to cited findings when given a scripted LLM that only",
+            "  ever cites real evidence_ids; it does not measure a real LLM's tendency",
+            "  to hallucinate citations — that failure mode is separately covered by",
+            "  Phase 6's citation-gate correction loop",
+            "  (`tests/unit/test_synthesizer.py`), which is unit-tested against a",
+            "  deliberately fabricated bad citation.",
             "",
         ]
     )
