@@ -30,6 +30,7 @@ class Orchestrator:
         handler: StepHandler,
         config: Config | None = None,
         clock: Callable[[], datetime] | None = None,
+        emitter: EventEmitter | None = None,
     ) -> None:
         self.config = config if config is not None else Config()
         self._llm = llm
@@ -37,16 +38,23 @@ class Orchestrator:
         self._handler = handler
         self._clock = clock if clock is not None else _default_clock
         self.state = AgentState(user_goal=goal)
+        # built in __init__ so an injected handler (Researcher) can share the
+        # SAME emitter — tool/evidence events must land in state.execution_events
+        self._emitter = (
+            emitter
+            if emitter is not None
+            else EventEmitter(
+                self._clock,
+                sinks=[
+                    InMemoryEventSink(self.state.execution_events),
+                    ConsoleEventSink(verbose=self.config.verbose),
+                ],
+            )
+        )
 
     async def run(self) -> AgentState:
         state = self.state
-        emitter = EventEmitter(
-            self._clock,
-            sinks=[
-                InMemoryEventSink(state.execution_events),
-                ConsoleEventSink(verbose=self.config.verbose),
-            ],
-        )
+        emitter = self._emitter
 
         normalized = normalize_goal(state.user_goal)
         state.normalized_goal = normalized
