@@ -1,0 +1,18 @@
+# Environments
+.venv/
+.env
+
+# Python caches
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.qodo/
+
+# Runtime output — generated reports (deliverables live in examples/sample_runs/)
+reports/*
+!reports/.gitkeep
+data/
