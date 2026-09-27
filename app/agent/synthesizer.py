@@ -115,9 +115,14 @@ def _finding_violation(finding: Finding, by_id: dict[str, Evidence]) -> str | No
 
 def contradictions_from(evidence: list[Evidence]) -> list[str]:
     entries: list[str] = []
+    seen_pairs: set[frozenset[str]] = set()
     for item in evidence:
         verification = item.verification
         if verification.conflict_with:
+            pair = frozenset([item.evidence_id, *verification.conflict_with])
+            if pair in seen_pairs:
+                continue
+            seen_pairs.add(pair)
             others = ", ".join(sorted(verification.conflict_with))
             detail = verification.note or "cross-source disagreement"
             entries.append(f"{item.evidence_id} conflicts with {others}: {detail}")
@@ -319,7 +324,7 @@ def _build_sources(state: AgentState) -> list[SourceRef]:
         refs.append(
             SourceRef(
                 index=0,
-                url=key,
+                url=item.source_url,
                 title=titles.get(key, item.source_title),
                 domain=urlparse(key).netloc,
             )

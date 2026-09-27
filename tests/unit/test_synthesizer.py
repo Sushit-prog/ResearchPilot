@@ -10,6 +10,7 @@ from app.agent.state import AgentState, StepRecord
 from app.agent.synthesizer import (
     build_execution_summary,
     build_synthesis_prompt,
+    contradictions_from,
     parse_report,
     render_markdown,
     slugify_goal,
@@ -22,6 +23,7 @@ from app.models.events import EventKind, FailureKind, ToolResult
 from app.models.evidence import Evidence, EvidenceVerification, Source
 from app.models.plan import Plan, StepStatus
 from app.observability import EventEmitter, InMemoryEventSink
+from app.reliability.validation import normalize_url
 
 FIXED_TIME = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
 
@@ -277,6 +279,111 @@ async def test_contradictions_take_verification_conflicts_first(
     assert report.contradictions[0].startswith("ev-a conflicts with ev-b:")
     assert "cross-source disagreement on 'yoy_growth'" in report.contradictions[0]
     assert "An extra LLM-observed point." in report.contradictions
+
+
+def test_contradictions_from_dedupes_symmetric_conflict_pair() -> None:
+    note = "cross-source disagreement on 'yoy_growth': values [12.0, 15.0]"
+    ev_a = make_evidence(
+        "ev-a",
+        "yoy growth 12%",
+        url="https://example.com/a",
+        verification=EvidenceVerification(
+            recomputed=True,
+            consistent=False,
+            conflict_with=["ev-b"],
+            note=note,
+        ),
+    )
+    ev_b = make_evidence(
+        "ev-b",
+        "yoy growth 15%",
+        url="https://example.org/b",
+        verification=EvidenceVerification(
+            recomputed=True,
+            consistent=False,
+            conflict_with=["ev-a"],
+            note=note,
+        ),
+    )
+    entries = contradictions_from([ev_a, ev_b])
+    assert entries == [f"ev-a conflicts with ev-b: {note}"]
+
+
+async def test_report_contradictions_single_line_for_symmetric_conflict(
+    fake_llm, synthesis_json
+) -> None:
+    note = "cross-source disagreement on 'yoy_growth': values [12.0, 15.0]"
+    evidence = [
+        make_evidence(
+            "ev-a",
+            "yoy growth 12%",
+            url="https://example.com/a",
+            verification=EvidenceVerification(
+                recomputed=True,
+                consistent=False,
+                conflict_with=["ev-b"],
+                note=note,
+            ),
+        ),
+        make_evidence(
+            "ev-b",
+            "yoy growth 15%",
+            url="https://example.org/b",
+            verification=EvidenceVerification(
+                recomputed=True,
+                consistent=False,
+                conflict_with=["ev-a"],
+                note=note,
+            ),
+        ),
+    ]
+    state = make_state(evidence)
+    payload = synthesis_json(
+        [("ev-a", "https://example.com/a"), ("ev-b", "https://example.org/b")],
+        contradictions=[],
+    )
+    llm = fake_llm(payload)
+    report, _events, _state = await synthesize_with(llm, state)
+    conflict_lines = [line for line in report.contradictions if "conflicts with" in line]
+    assert conflict_lines == [f"ev-a conflicts with ev-b: {note}"]
+
+
+async def test_source_url_display_parity_and_normalized_dedup(
+    fake_llm, synthesis_json
+) -> None:
+    raw_utm = "https://example.com/a/?utm_source=x"
+    raw_slash = "https://example.com/a/"
+    state = make_state(
+        [
+            make_evidence("ev-a", "claim A", url=raw_utm),
+            make_evidence("ev-b", "claim B", url=raw_slash),
+        ]
+    )
+    payload = synthesis_json([("ev-a", raw_utm), ("ev-b", raw_slash)])
+    llm = fake_llm(payload)
+    report, _events, _state = await synthesize_with(llm, state)
+    assert raw_utm != raw_slash
+    assert normalize_url(raw_utm) == normalize_url(raw_slash)
+
+    rendered = render_markdown(report)
+    finding_section = rendered.split("## Key Findings\n", 1)[1].split("\n## ", 1)[0]
+    finding_urls = [
+        line.split(" — ", 1)[1].rsplit(" (confidence", 1)[0]
+        for line in finding_section.splitlines()
+        if " Source: " in line
+    ]
+    assert finding_urls == [raw_utm, raw_slash]
+
+    sources_section = rendered.split("## Sources\n", 1)[1].split("\n## ", 1)[0]
+    numbered = [
+        line
+        for line in sources_section.splitlines()
+        if len(line) > 2 and line[1] == "." and line[0].isdigit()
+    ]
+    assert len(numbered) == 1
+    sources_url = numbered[0].split(" — ", 1)[1].rsplit(" (", 1)[0]
+    assert sources_url == raw_utm
+    assert sources_url == finding_urls[0]
 
 
 async def test_research_question_and_sources_rebuilt_deterministically(
