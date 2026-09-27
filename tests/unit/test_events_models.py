@@ -31,6 +31,7 @@ EXTENSIONS = {
     "evidence_rejected",
     "evidence_conflict",
     "run_completed",
+    "memory_lookup",
 }
 
 

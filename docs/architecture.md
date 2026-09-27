@@ -89,7 +89,7 @@ xiarch/                          # repo root = project root (see deviation D1)
 | D6 | New `app/llm/` package | §18 requires an LLM abstraction interface; the §4 layout has no directory for it. Three focused modules (protocol, one provider, one fake) justify a package over a single file. |
 | D7 | New `reliability/runner.py` | The single seam that composes *validate → timeout → retry → classify → emit events* around every tool call. Keeps `retry.py`/`timeout.py` as pure primitives and tools as pure `execute()` bodies — this is what makes §19's deterministic-runtime-around-the-LLM split real instead of aspirational. |
 | D8 | New `tests/failure/` directory | §20 names failure tests as a third category; robustness carries 20% rubric weight and deserves a visible home next to `unit/` and `integration/`. |
-| D9 | `EventKind` extends §13's list | §13 says events must *cover* the listed names — a floor, not a ceiling. Added: `goal_normalized`, `plan_invalid`, `step_failed`, `source_unavailable`, `candidate_advanced`, `evidence_rejected`, `evidence_conflict`, `run_completed`. Every extension exists to make a recovery or rejection path visible in transcripts. |
+| D9 | `EventKind` extends §13's list | §13 says events must *cover* the listed names — a floor, not a ceiling. Added: `goal_normalized`, `plan_invalid`, `step_failed`, `source_unavailable`, `candidate_advanced`, `evidence_rejected`, `evidence_conflict`, `run_completed`, `memory_lookup`. Every extension exists to make a recovery or rejection path visible in transcripts (`memory_lookup` makes the §17 stale-cache surface visible). |
 | D10 | New `app/models/tool_io.py` | Phase 3 turned §3's "tool schemas (contracts only)" into real models. They must be importable by the tools, by `researcher.py` in Phase 5, and by tests; `models/` is already the data-contract package, while duplicating the schemas inside each tool module would fragment them. |
 | D11 | `ToolResult.unclassified: bool = False` + `runner.is_unclassified()` | A code bug (e.g. `IndexError`) that matches no row of `classify()`'s table still classifies `PERMANENT` — correct for retry safety, but it made a genuine bug indistinguishable from a known permanent failure like a 404. The additive field (default `False`) tags the ToolResult, the `tool_failed` event carries `data={"unclassified": true, "error_type": ...}` (free-form `data`, §13-sanctioned), and the console renders `[WARN] unexpected error type: ...` instead of the normal failure line. Taxonomy untouched: still §12's five kinds, still no retry-loop. |
 | D12 | `FailureRecord.unclassified: bool = False` | D11's flag died at the report boundary: `Report.execution_summary.failures` is the surface a reviewer actually reads, and a code bug listed there without the marker looks identical to a known permanent failure. The additive field (default `False`) is populated from the failed step's `ToolResult`s via `StepRecord.result_ids`; `render_markdown` appends `UNCLASSIFIED` to the failure line. Related: a `StepRecord.failure_kind` of `None` (handler-declared failure) records as `PERMANENT` — the same conservative fallback `classify()` uses. |
@@ -568,7 +568,11 @@ RECOVERY transcript without touching the network.
 `goal_normalized` + the goal to the console. Optional memory lookup: if a
 recent run has the same normalized goal, its result is *shown with its age*
 ("cached from 2 days ago — may be stale") and never silently reused (§17).
-`--no-memory` skips read and write.
+The lookup emits `memory_lookup`, rendered as
+`[MEMORY] cached from <age> — may be stale (status: <status>, report: <path>)`
+(`no report` for failed runs — failed rows are stored for history and surfaced
+the same way, with their status). v1 is strictly informational: the run always
+continues fresh. `--no-memory` skips read and write.
 
 ### 4.2 Stage 2 — Plan generation (LLM) with bounded correction
 
@@ -812,8 +816,12 @@ console prints the execution summary.
 
 Unless `--no-memory`: insert one run row (query, normalized goal, timestamp,
 status, report path, source URLs, evidence count, duration) via stdlib
-`sqlite3`. Stale rows are only ever shown *with their age* (§17). Final
-`run_completed` event; exit code per §4.0.
+`sqlite3`. The insert runs on **every terminal path** — after the report is
+written and after `FAILED` with no report (including planner exhaustion) —
+and always *before* the final `run_completed` event. Stale rows are only ever
+shown *with their age* (§17). A store failure (locked/corrupt file) degrades to
+a warning on state, never a run failure. Final `run_completed` event; exit code
+per §4.0.
 
 ### Hook points — where cross-cutting concerns live
 

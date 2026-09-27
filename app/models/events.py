@@ -58,6 +58,7 @@ class EventKind(str, Enum):
     EVIDENCE_REJECTED = "evidence_rejected"
     EVIDENCE_CONFLICT = "evidence_conflict"
     RUN_COMPLETED = "run_completed"
+    MEMORY_LOOKUP = "memory_lookup"
 
 
 class ExecutionEvent(BaseModel):

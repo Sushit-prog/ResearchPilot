@@ -15,8 +15,9 @@ from app.agent.verifier import (
     numeric_pass,
 )
 from app.config import Config
-from app.errors import PlannerError, PlanValidationError, SynthesisError
+from app.errors import MemoryStoreError, PlannerError, PlanValidationError, SynthesisError
 from app.llm.base import LLMProvider
+from app.memory.sqlite import MemoryStore, format_age
 from app.models.events import EventKind
 from app.models.plan import PlanStep, StepStatus
 from app.observability import ConsoleEventSink, EventEmitter, InMemoryEventSink
@@ -69,6 +70,7 @@ class Orchestrator:
         normalized = normalize_goal(state.user_goal)
         state.normalized_goal = normalized
         emitter.emit(EventKind.GOAL_NORMALIZED, message=normalized)
+        self._memory_lookup(state, emitter)
 
         state.status = AgentStatus.PLANNING
         try:
@@ -77,6 +79,7 @@ class Orchestrator:
             )
         except (PlannerError, PlanValidationError):
             state.status = AgentStatus.FAILED
+            self._memory_insert(state, started_at=started_at)
             raise
 
         state.status = AgentStatus.EXECUTING
@@ -146,6 +149,7 @@ class Orchestrator:
         if sufficiency is Sufficiency.EMPTY:
             state.status = AgentStatus.FAILED
             state.warnings.append("no evidence collected — no report possible")
+            self._memory_insert(state, started_at=started_at)
             _emit_run_completed(emitter, state, started_at=started_at, clock=self._clock)
             return state
         if sufficiency is Sufficiency.INSUFFICIENT:
@@ -166,6 +170,7 @@ class Orchestrator:
         except SynthesisError as exc:
             state.status = AgentStatus.FAILED
             state.warnings.append(str(exc))
+            self._memory_insert(state, started_at=started_at)
             _emit_run_completed(emitter, state, started_at=started_at, clock=self._clock)
             return state
         state.final_report = report
@@ -184,8 +189,49 @@ class Orchestrator:
             },
         )
         state.status = AgentStatus.COMPLETED
+        self._memory_insert(state, started_at=started_at)
         _emit_run_completed(emitter, state, started_at=started_at, clock=self._clock)
         return state
+
+    def _memory_lookup(self, state: AgentState, emitter: EventEmitter) -> None:
+        if not self.config.memory_enabled:
+            return
+        try:
+            prior = MemoryStore(self.config.memory_path).lookup(state.normalized_goal)
+        except MemoryStoreError as exc:
+            state.warnings.append(str(exc))
+            return
+        if prior is None:
+            return
+        age = format_age(prior.created_at, self._clock())
+        emitter.emit(
+            EventKind.MEMORY_LOOKUP,
+            message=f"cached from {age} — may be stale",
+            data={
+                "status": prior.status,
+                "report_path": prior.report_path,
+                "created_at": prior.created_at.isoformat(),
+                "evidence_count": prior.evidence_count,
+            },
+        )
+
+    def _memory_insert(self, state: AgentState, *, started_at: datetime) -> None:
+        if not self.config.memory_enabled:
+            return
+        now = self._clock()
+        try:
+            MemoryStore(self.config.memory_path).insert_run(
+                query=state.user_goal,
+                normalized_goal=state.normalized_goal,
+                created_at=now,
+                status=state.status.value,
+                report_path=state.report_path,
+                source_urls=list(dict.fromkeys(s.url for s in state.sources)),
+                evidence_count=len(state.evidence),
+                duration_s=max((now - started_at).total_seconds(), 0.0),
+            )
+        except MemoryStoreError as exc:
+            state.warnings.append(str(exc))
 
 
 def _emit_run_completed(

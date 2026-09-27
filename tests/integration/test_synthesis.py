@@ -51,7 +51,7 @@ async def test_full_run_reaches_completed_with_report_file(
         llm=llm,
         registry=registry,
         handler=evidence_handler,
-        config=Config(report_dir=str(tmp_path)),
+        config=Config(report_dir=str(tmp_path), memory_enabled=False),
         clock=fixed_clock,
     )
     state = await orchestrator.run()
@@ -100,7 +100,7 @@ async def test_citation_degradation_ships_report_with_warning(
         llm=llm,
         registry=registry,
         handler=evidence_handler,
-        config=Config(report_dir=str(tmp_path)),
+        config=Config(report_dir=str(tmp_path), memory_enabled=False),
         clock=fixed_clock,
     )
     state = await orchestrator.run()
@@ -129,7 +129,7 @@ async def test_synthesis_exhaustion_fails_run_without_report_file(
         llm=llm,
         registry=registry,
         handler=evidence_handler,
-        config=Config(report_dir=str(tmp_path)),
+        config=Config(report_dir=str(tmp_path), memory_enabled=False),
         clock=fixed_clock,
     )
     state = await orchestrator.run()
@@ -157,7 +157,7 @@ async def test_llm_exhaustion_during_synthesis_fails_run_gracefully(
         llm=llm,
         registry=registry,
         handler=evidence_handler,
-        config=Config(report_dir=str(tmp_path)),
+        config=Config(report_dir=str(tmp_path), memory_enabled=False),
         clock=fixed_clock,
     )
     state = await orchestrator.run()

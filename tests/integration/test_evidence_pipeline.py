@@ -117,7 +117,7 @@ def _make_orchestrator(
         llm=fake_llm(valid_plan_json, synthesis_json(citations)),
         registry=registry,
         handler=handler,  # type: ignore[arg-type]
-        config=Config(report_dir=report_dir),
+        config=Config(report_dir=report_dir, memory_enabled=False),
         clock=fixed_clock,
         emitter=emitter,
     )

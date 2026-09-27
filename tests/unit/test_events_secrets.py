@@ -21,6 +21,7 @@ async def test_api_key_never_reaches_events_or_console(
     evidence_handler,
 ) -> None:
     monkeypatch.setenv("RESEARCHPILOT_LLM_API_KEY", SECRET)
+    monkeypatch.setenv("RESEARCHPILOT_MEMORY", "false")
     config = Config.from_env()
     assert config.llm.api_key is not None
     assert config.llm.api_key.get_secret_value() == SECRET
@@ -50,6 +51,7 @@ async def test_planner_failure_state_carries_no_secret(
     monkeypatch, fake_llm, registry, fixed_clock, evidence_handler
 ) -> None:
     monkeypatch.setenv("RESEARCHPILOT_LLM_API_KEY", SECRET)
+    monkeypatch.setenv("RESEARCHPILOT_MEMORY", "false")
     config = Config.from_env()
     llm = fake_llm("bad", "bad", "bad")
     orchestrator = Orchestrator(

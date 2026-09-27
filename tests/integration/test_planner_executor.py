@@ -30,7 +30,7 @@ async def test_planner_to_executor_full_phase_run(
         llm=llm,
         registry=registry,
         handler=evidence_handler,
-        config=Config(report_dir=str(tmp_path)),
+        config=Config(report_dir=str(tmp_path), memory_enabled=False),
         clock=fixed_clock,
     )
     state = await orchestrator.run()
@@ -84,7 +84,7 @@ async def test_planner_exhaustion_marks_state_failed(
         llm=llm,
         registry=registry,
         handler=evidence_handler,
-        config=Config(),
+        config=Config(memory_enabled=False),
         clock=fixed_clock,
     )
     with pytest.raises(PlannerError):
@@ -110,7 +110,7 @@ async def test_zero_evidence_marks_run_failed(
         llm=llm,
         registry=registry,
         handler=empty_handler,
-        config=Config(),
+        config=Config(memory_enabled=False),
         clock=fixed_clock,
     )
     state = await orchestrator.run()
@@ -131,7 +131,7 @@ async def test_empty_goal_fails_before_any_llm_call(
         llm=llm,
         registry=registry,
         handler=evidence_handler,
-        config=Config(),
+        config=Config(memory_enabled=False),
         clock=fixed_clock,
     )
     with pytest.raises(PlanValidationError):
@@ -178,7 +178,7 @@ async def test_failed_step_with_remaining_evidence_completes_run(
         llm=llm,
         registry=registry,
         handler=PartialHandler(),
-        config=Config(report_dir=str(tmp_path)),
+        config=Config(report_dir=str(tmp_path), memory_enabled=False),
         clock=fixed_clock,
     )
     state = await orchestrator.run()

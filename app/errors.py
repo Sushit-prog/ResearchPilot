@@ -51,5 +51,9 @@ class ConfigurationError(ResearchPilotError):
     failure_kind = None
 
 
+class MemoryStoreError(ResearchPilotError):
+    failure_kind = None
+
+
 class ToolNotFoundError(ResearchPilotError):
     failure_kind = None

@@ -70,6 +70,8 @@ class ConsoleEventSink:
         kind = event.event
         if kind is EventKind.GOAL_NORMALIZED:
             return f"[GOAL] {event.message or ''}"
+        if kind is EventKind.MEMORY_LOOKUP:
+            return self._render_memory(event)
         if kind is EventKind.PLAN_CREATED:
             return self._render_plan(event)
         if kind is EventKind.PLAN_INVALID:
@@ -120,6 +122,13 @@ class ConsoleEventSink:
         for index, step in enumerate(steps, start=1):
             lines.append(f"  {index}. {step['id']} [{step['tool']}] {step['objective']}")
         return "\n".join(lines)
+
+    @staticmethod
+    def _render_memory(event: ExecutionEvent) -> str:
+        report_path = event.data.get("report_path")
+        status = event.data.get("status", "unknown")
+        detail = f"report: {report_path}" if report_path else "no report"
+        return f"[MEMORY] {event.message or ''} (status: {status}, {detail})"
 
     def _detail(self, event: ExecutionEvent) -> str:
         parts = [f"[{event.event.value}]"]

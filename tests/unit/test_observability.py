@@ -42,6 +42,33 @@ def test_renders_goal_line(fixed_clock) -> None:
     assert buffer.getvalue().strip() == "[GOAL] What is X?"
 
 
+def test_renders_memory_lookup_with_age_status_and_report(fixed_clock) -> None:
+    sink, buffer = _console()
+    emitter = EventEmitter(fixed_clock, sinks=[sink])
+    emitter.emit(
+        EventKind.MEMORY_LOOKUP,
+        message="cached from 2 days ago — may be stale",
+        data={"status": "completed", "report_path": "reports/what-is-x.md"},
+    )
+    assert buffer.getvalue().strip() == (
+        "[MEMORY] cached from 2 days ago — may be stale "
+        "(status: completed, report: reports/what-is-x.md)"
+    )
+
+
+def test_renders_memory_lookup_without_report(fixed_clock) -> None:
+    sink, buffer = _console()
+    emitter = EventEmitter(fixed_clock, sinks=[sink])
+    emitter.emit(
+        EventKind.MEMORY_LOOKUP,
+        message="cached from earlier today — may be stale",
+        data={"status": "failed", "report_path": None},
+    )
+    assert buffer.getvalue().strip() == (
+        "[MEMORY] cached from earlier today — may be stale (status: failed, no report)"
+    )
+
+
 def test_renders_numbered_plan(fixed_clock) -> None:
     sink, buffer = _console()
     emitter = EventEmitter(fixed_clock, sinks=[sink])

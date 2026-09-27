@@ -155,7 +155,7 @@ async def test_orchestrator_end_to_end_books_retries_and_shares_emitter(
         ),
         registry=registry,
         handler=researcher,
-        config=Config(report_dir=str(tmp_path)),
+        config=Config(report_dir=str(tmp_path), memory_enabled=False),
         clock=lambda: FIXED_TIME,
         emitter=emitter,
     )
