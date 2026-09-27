@@ -937,12 +937,17 @@ deterministically, on a cold machine.
 
 5–10 synthetic tasks in `tests/fixtures/research_tasks.json` (clearly labeled
 synthetic): query, expected characteristics, required tool types, expected
-report sections, optional failure scenario. Runs against `FakeLLMProvider` +
-MockTransport (deterministic), measuring: plan validity (first-pass and
-post-correction), tool success rate, recovery rate (induced failures
-recovered / induced), source coverage, duplicate rate, report completeness,
-citation presence. Results recorded in `docs/evaluation.md` — **only
-actually-measured numbers** (§21).
+report sections, optional failure scenario. Runs against a deterministic LLM
+stand-in (scripted plans; synthesis derived from the evidence list the
+production prompt itself carries) + MockTransport, measuring: plan validity
+(first-pass and post-correction), tool success rate, recovery rate (induced
+failures recovered / induced), source coverage, duplicate rate, report
+completeness, citation presence. Results are written to `docs/evaluation.md`
+**by the test suite itself** (`test_evaluation_doc_matches_measured_results`)
+— the file is regenerated on every `uv run pytest tests -q`, contains only
+actually-measured numbers (§21), and is guarded against stale or hand-edited
+content by `test_evaluation_rendering_is_deterministic`, which re-runs the
+whole harness and asserts a byte-identical render.
 
 A separate `@pytest.mark.live` smoke test (excluded from the default `pytest`
 run) can hit a real search/LLM endpoint manually — never part of CI.

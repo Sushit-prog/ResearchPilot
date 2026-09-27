@@ -1,0 +1,445 @@
+{
+  "_note": "SYNTHETIC evaluation tasks for the offline harness (tests/evaluation/). No real-world data: queries, plans, search results, and pages are invented fixtures. Every HTTP response is served from this file via httpx.MockTransport; no live network calls occur.",
+  "synthetic": true,
+  "tasks": [
+    {
+      "id": "t1-broad",
+      "category": "broad_research",
+      "synthetic": true,
+      "query": "recent advances in reusable orbital launch vehicles",
+      "plan_first_attempt": null,
+      "plan": {
+        "goal": "recent advances in reusable orbital launch vehicles",
+        "steps": [
+          {
+            "id": "r1",
+            "objective": "search for recovery and reuse methods",
+            "tool": "web_search",
+            "arguments": {"query": "reusable orbital launch vehicle recovery"},
+            "expected_output": "structured search results about recovery methods"
+          },
+          {
+            "id": "r2",
+            "objective": "search for refurbishment progress",
+            "tool": "web_search",
+            "arguments": {"query": "orbital launch vehicle refurbishment progress"},
+            "expected_output": "structured search results about refurbishment progress"
+          }
+        ]
+      },
+      "canned_searches": {
+        "reusable orbital launch vehicle recovery": [
+          {
+            "title": "Propulsive landing recovery methods",
+            "url": "https://nasa-sim.example/recovery",
+            "content": "Reusable orbital launch vehicle recovery now relies on propulsive landing of first stages."
+          },
+          {
+            "title": "Reuse economics update",
+            "url": "https://space-report.example/reuse-economics",
+            "content": "Orbital launch vehicle reuse has cut per-flight costs significantly for operators."
+          }
+        ],
+        "orbital launch vehicle refurbishment progress": [
+          {
+            "title": "Refurbishment turnaround",
+            "url": "https://nasa-sim.example/refurbishment",
+            "content": "Reusable launch refurbishment turnaround times improved with standardized inspections."
+          },
+          {
+            "title": "Flight cadence records",
+            "url": "https://industry-sim.example/cadence",
+            "content": "Orbital launch vehicles flew at a record cadence thanks to rapid refurbishment."
+          }
+        ]
+      },
+      "canned_pages": {
+        "https://nasa-sim.example/recovery": "<!doctype html><html><head><title>Propulsive landing recovery methods</title></head><body><p>Reusable orbital launch vehicle recovery now relies on propulsive landing of first stages.</p></body></html>",
+        "https://space-report.example/reuse-economics": "<!doctype html><html><head><title>Reuse economics update</title></head><body><p>Orbital launch vehicle reuse has cut per-flight costs significantly for operators.</p></body></html>",
+        "https://nasa-sim.example/refurbishment": "<!doctype html><html><head><title>Refurbishment turnaround</title></head><body><p>Reusable launch refurbishment turnaround times improved with standardized inspections.</p></body></html>",
+        "https://industry-sim.example/cadence": "<!doctype html><html><head><title>Flight cadence records</title></head><body><p>Orbital launch vehicles flew at a record cadence thanks to rapid refurbishment.</p></body></html>"
+      },
+      "expected": {
+        "status": "completed",
+        "plan_first_pass_valid": true,
+        "required_tools": ["web_search", "webpage_fetch"],
+        "required_sections": [
+          "## Research Question",
+          "## Executive Summary",
+          "## Key Findings",
+          "## Important Evidence",
+          "## Contradictions / Uncertainty",
+          "## Actionable Insights",
+          "## Sources",
+          "## Execution Summary"
+        ],
+        "min_distinct_sources": 4,
+        "min_findings": 4,
+        "deduplicated_events": 0,
+        "induced_failures": 0,
+        "min_recovered": 0,
+        "contradictions_expected": false,
+        "min_computed_findings": 0
+      }
+    },
+    {
+      "id": "t2-quantitative",
+      "category": "quantitative_analysis",
+      "synthetic": true,
+      "query": "electric vehicle sales growth this year",
+      "plan_first_attempt": null,
+      "plan": {
+        "goal": "electric vehicle sales growth this year",
+        "steps": [
+          {
+            "id": "r1",
+            "objective": "search for EV sales growth reporting",
+            "tool": "web_search",
+            "arguments": {"query": "electric vehicle sales growth"},
+            "expected_output": "structured search results about EV sales growth"
+          },
+          {
+            "id": "q1",
+            "objective": "compute the 12 percent growth projection from the goal's baseline",
+            "tool": "calculator",
+            "arguments": {"expression": "10 * 1.12"},
+            "expected_output": "projected units after 12 percent growth"
+          }
+        ]
+      },
+      "canned_searches": {
+        "electric vehicle sales growth": [
+          {
+            "title": "Global EV sales dashboard",
+            "url": "https://ev-stats.example/sales",
+            "content": "Electric vehicle sales growth accelerated across major markets this year."
+          },
+          {
+            "title": "Quarterly EV registrations",
+            "url": "https://market-watch.example/registrations",
+            "content": "Electric vehicle sales growth held steady in the third quarter."
+          }
+        ]
+      },
+      "canned_pages": {
+        "https://ev-stats.example/sales": "<!doctype html><html><head><title>Global EV sales dashboard</title></head><body><p>Electric vehicle sales growth accelerated across major markets this year.</p></body></html>",
+        "https://market-watch.example/registrations": "<!doctype html><html><head><title>Quarterly EV registrations</title></head><body><p>Electric vehicle sales growth held steady in the third quarter.</p></body></html>"
+      },
+      "expected": {
+        "status": "completed",
+        "plan_first_pass_valid": true,
+        "required_tools": ["web_search", "webpage_fetch", "calculator"],
+        "required_sections": [
+          "## Research Question",
+          "## Executive Summary",
+          "## Key Findings",
+          "## Important Evidence",
+          "## Contradictions / Uncertainty",
+          "## Actionable Insights",
+          "## Sources",
+          "## Execution Summary"
+        ],
+        "min_distinct_sources": 2,
+        "min_findings": 3,
+        "deduplicated_events": 0,
+        "induced_failures": 0,
+        "min_recovered": 0,
+        "contradictions_expected": false,
+        "min_computed_findings": 1
+      }
+    },
+    {
+      "id": "t3-ambiguous",
+      "category": "ambiguous_goal",
+      "synthetic": true,
+      "query": "What about batteries?",
+      "plan_first_attempt": {
+        "goal": "What about batteries?",
+        "steps": [
+          {
+            "id": "r1",
+            "objective": "fetch battery data directly",
+            "tool": "web_fetch_any",
+            "arguments": {"query": "batteries"},
+            "expected_output": "battery data"
+          }
+        ]
+      },
+      "plan": {
+        "goal": "What about batteries?",
+        "steps": [
+          {
+            "id": "r1",
+            "objective": "search for batteries in long duration storage",
+            "tool": "web_search",
+            "arguments": {"query": "batteries long duration energy storage"},
+            "expected_output": "structured search results about batteries"
+          }
+        ]
+      },
+      "canned_searches": {
+        "batteries long duration energy storage": [
+          {
+            "title": "Long duration storage primer",
+            "url": "https://energy-sim.example/batteries-primer",
+            "content": "Batteries for long duration energy storage are being deployed at grid scale."
+          },
+          {
+            "title": "Iron-air pilot results",
+            "url": "https://chem-sim.example/iron-air",
+            "content": "New iron-air batteries promise multi-hour storage for the grid."
+          },
+          {
+            "title": "Storage market outlook",
+            "url": "https://market-sim.example/storage-outlook",
+            "content": "Batteries dominate the storage market outlook for the coming years."
+          }
+        ]
+      },
+      "canned_pages": {
+        "https://energy-sim.example/batteries-primer": "<!doctype html><html><head><title>Long duration storage primer</title></head><body><p>Batteries for long duration energy storage are being deployed at grid scale.</p></body></html>",
+        "https://chem-sim.example/iron-air": "<!doctype html><html><head><title>Iron-air pilot results</title></head><body><p>New iron-air batteries promise multi-hour storage for the grid.</p></body></html>",
+        "https://market-sim.example/storage-outlook": "<!doctype html><html><head><title>Storage market outlook</title></head><body><p>Batteries dominate the storage market outlook for the coming years.</p></body></html>"
+      },
+      "expected": {
+        "status": "completed",
+        "plan_first_pass_valid": false,
+        "required_tools": ["web_search", "webpage_fetch"],
+        "required_sections": [
+          "## Research Question",
+          "## Executive Summary",
+          "## Key Findings",
+          "## Important Evidence",
+          "## Contradictions / Uncertainty",
+          "## Actionable Insights",
+          "## Sources",
+          "## Execution Summary"
+        ],
+        "min_distinct_sources": 3,
+        "min_findings": 3,
+        "deduplicated_events": 0,
+        "induced_failures": 0,
+        "min_recovered": 0,
+        "contradictions_expected": false,
+        "min_computed_findings": 0
+      }
+    },
+    {
+      "id": "t4-duplicate-sources",
+      "category": "duplicate_sources",
+      "synthetic": true,
+      "query": "orbital launch vehicle cost analysis report",
+      "plan_first_attempt": null,
+      "plan": {
+        "goal": "orbital launch vehicle cost analysis report",
+        "steps": [
+          {
+            "id": "r1",
+            "objective": "search for the cost analysis report",
+            "tool": "web_search",
+            "arguments": {"query": "orbital launch vehicle cost analysis report"},
+            "expected_output": "structured search results including the report"
+          },
+          {
+            "id": "r2",
+            "objective": "search again for updated copies of the report",
+            "tool": "web_search",
+            "arguments": {"query": "orbital launch vehicle cost analysis report update"},
+            "expected_output": "structured search results including a duplicate of the report"
+          }
+        ]
+      },
+      "canned_searches": {
+        "orbital launch vehicle cost analysis report": [
+          {
+            "title": "Cost analysis report",
+            "url": "https://example.org/report/",
+            "content": "Orbital launch vehicle cost analysis report shows declining per-unit costs."
+          },
+          {
+            "title": "Independent cost findings",
+            "url": "https://findings-a.example/cost-a",
+            "content": "Independent analysis of orbital launch vehicle costs reached similar conclusions."
+          }
+        ],
+        "orbital launch vehicle cost analysis report update": [
+          {
+            "title": "Cost analysis report feed",
+            "url": "https://example.org/report/?utm_source=feed",
+            "content": "Orbital launch vehicle cost analysis report shows declining per-unit costs."
+          },
+          {
+            "title": "Follow-up cost findings",
+            "url": "https://findings-b.example/cost-b",
+            "content": "Follow-up analysis confirmed orbital launch vehicle cost trends."
+          }
+        ]
+      },
+      "canned_pages": {
+        "https://example.org/report/": "<!doctype html><html><head><title>Cost analysis report</title></head><body><p>Orbital launch vehicle cost analysis report shows declining per-unit costs.</p></body></html>",
+        "https://findings-a.example/cost-a": "<!doctype html><html><head><title>Independent cost findings</title></head><body><p>Independent analysis of orbital launch vehicle costs reached similar conclusions.</p></body></html>",
+        "https://example.org/report/?utm_source=feed": "<!doctype html><html><head><title>Cost analysis report feed</title></head><body><p>Orbital launch vehicle cost analysis report shows declining per-unit costs.</p></body></html>",
+        "https://findings-b.example/cost-b": "<!doctype html><html><head><title>Follow-up cost findings</title></head><body><p>Follow-up analysis confirmed orbital launch vehicle cost trends.</p></body></html>"
+      },
+      "expected": {
+        "status": "completed",
+        "plan_first_pass_valid": true,
+        "required_tools": ["web_search", "webpage_fetch"],
+        "required_sections": [
+          "## Research Question",
+          "## Executive Summary",
+          "## Key Findings",
+          "## Important Evidence",
+          "## Contradictions / Uncertainty",
+          "## Actionable Insights",
+          "## Sources",
+          "## Execution Summary"
+        ],
+        "min_distinct_sources": 3,
+        "min_findings": 3,
+        "deduplicated_events": 1,
+        "induced_failures": 0,
+        "min_recovered": 0,
+        "contradictions_expected": false,
+        "min_computed_findings": 0
+      }
+    },
+    {
+      "id": "t5-failure-recovery",
+      "category": "failure_recovery",
+      "synthetic": true,
+      "query": "grid scale battery storage deployment 2025",
+      "plan_first_attempt": null,
+      "plan": {
+        "goal": "grid scale battery storage deployment 2025",
+        "steps": [
+          {
+            "id": "r1",
+            "objective": "search for deployment reporting",
+            "tool": "web_search",
+            "arguments": {"query": "grid scale battery storage deployment"},
+            "expected_output": "structured search results about deployment"
+          },
+          {
+            "id": "s1",
+            "objective": "exercise the induced-failure path once, then recover",
+            "tool": "failure_simulator",
+            "arguments": {"failure_mode": "temporary_error", "fail_times": 1},
+            "expected_output": "a transient failure followed by a successful retry"
+          }
+        ]
+      },
+      "canned_searches": {
+        "grid scale battery storage deployment": [
+          {
+            "title": "Grid storage deployment tracker",
+            "url": "https://energy-sim.example/grid-storage",
+            "content": "Grid scale battery storage deployment reached new records in 2025."
+          },
+          {
+            "title": "Utility storage projects",
+            "url": "https://utilities-sim.example/projects",
+            "content": "Utilities accelerated grid scale battery storage deployment across regions."
+          },
+          {
+            "title": "Capacity additions",
+            "url": "https://capacity-sim.example/additions",
+            "content": "Battery storage capacity additions show grid scale deployment momentum."
+          }
+        ]
+      },
+      "canned_pages": {
+        "https://energy-sim.example/grid-storage": "<!doctype html><html><head><title>Grid storage deployment tracker</title></head><body><p>Grid scale battery storage deployment reached new records in 2025.</p></body></html>",
+        "https://utilities-sim.example/projects": "<!doctype html><html><head><title>Utility storage projects</title></head><body><p>Utilities accelerated grid scale battery storage deployment across regions.</p></body></html>",
+        "https://capacity-sim.example/additions": "<!doctype html><html><head><title>Capacity additions</title></head><body><p>Battery storage capacity additions show grid scale deployment momentum.</p></body></html>"
+      },
+      "expected": {
+        "status": "completed",
+        "plan_first_pass_valid": true,
+        "required_tools": ["web_search", "webpage_fetch", "failure_simulator"],
+        "required_sections": [
+          "## Research Question",
+          "## Executive Summary",
+          "## Key Findings",
+          "## Important Evidence",
+          "## Contradictions / Uncertainty",
+          "## Actionable Insights",
+          "## Sources",
+          "## Execution Summary"
+        ],
+        "min_distinct_sources": 3,
+        "min_findings": 3,
+        "deduplicated_events": 0,
+        "induced_failures": 1,
+        "min_recovered": 1,
+        "contradictions_expected": false,
+        "min_computed_findings": 0
+      }
+    },
+    {
+      "id": "t6-conflicting-evidence",
+      "category": "conflicting_evidence",
+      "synthetic": true,
+      "query": "battery market share growth figures",
+      "plan_first_attempt": null,
+      "plan": {
+        "goal": "battery market share growth figures",
+        "steps": [
+          {
+            "id": "r1",
+            "objective": "search for market share growth figures",
+            "tool": "web_search",
+            "arguments": {"query": "battery market share growth"},
+            "expected_output": "structured search results with conflicting growth figures"
+          }
+        ]
+      },
+      "canned_searches": {
+        "battery market share growth": [
+          {
+            "title": "Government outlook",
+            "url": "https://reports-sim.example/outlook",
+            "content": "Government statisticians said the battery market share grew 12% from $100B to $112B in the fiscal year."
+          },
+          {
+            "title": "Auditor review",
+            "url": "https://audit-sim.example/review",
+            "content": "Independent auditors reported that the battery market share grew 15% from $100B to $115B last year."
+          },
+          {
+            "title": "Delivery volumes",
+            "url": "https://stats-sim.example/volumes",
+            "content": "Agency reports show battery market share of vehicle deliveries reached 350 million units in 2025."
+          }
+        ]
+      },
+      "canned_pages": {
+        "https://reports-sim.example/outlook": "<!doctype html><html><head><title>Government outlook</title></head><body><p>Government statisticians said the battery market share grew 12% from $100B to $112B in the fiscal year.</p></body></html>",
+        "https://audit-sim.example/review": "<!doctype html><html><head><title>Auditor review</title></head><body><p>Independent auditors reported that the battery market share grew 15% from $100B to $115B last year.</p></body></html>",
+        "https://stats-sim.example/volumes": "<!doctype html><html><head><title>Delivery volumes</title></head><body><p>Agency reports show battery market share of vehicle deliveries reached 350 million units in 2025.</p></body></html>"
+      },
+      "expected": {
+        "status": "completed",
+        "plan_first_pass_valid": true,
+        "required_tools": ["web_search", "webpage_fetch"],
+        "required_sections": [
+          "## Research Question",
+          "## Executive Summary",
+          "## Key Findings",
+          "## Important Evidence",
+          "## Contradictions / Uncertainty",
+          "## Actionable Insights",
+          "## Sources",
+          "## Execution Summary"
+        ],
+        "min_distinct_sources": 3,
+        "min_findings": 3,
+        "deduplicated_events": 0,
+        "induced_failures": 0,
+        "min_recovered": 0,
+        "contradictions_expected": true,
+        "min_computed_findings": 0
+      }
+    }
+  ]
+}
