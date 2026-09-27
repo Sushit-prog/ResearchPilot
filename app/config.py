@@ -25,7 +25,7 @@ class LLMConfig(BaseModel, frozen=True):
 
 
 class SearchConfig(BaseModel, frozen=True):
-    provider: str = "duckduckgo"
+    provider: str = "tavily"
     api_key: SecretStr | None = None
     max_results: int = 8
 
@@ -58,6 +58,7 @@ class Config(BaseModel, frozen=True):
         _collect(source, _INT_RETRY, retry, _parse_int)
         _collect(source, _FLOAT_RETRY, retry, _parse_float)
         _collect(source, _INT_SEARCH, search, _parse_int)
+        _collect(source, _STR_SEARCH, search, _parse_str)
         _collect(source, _STR_LLM, llm, _parse_str)
         _collect(source, _FLOAT_LLM, llm, _parse_float)
         _collect(source, _SECRET_LLM, llm, _parse_secret)
@@ -97,6 +98,7 @@ _FLOAT_RETRY = {
     "RESEARCHPILOT_RETRY_MAX_DELAY": "max_delay_s",
 }
 _INT_SEARCH = {"RESEARCHPILOT_SEARCH_MAX_RESULTS": "max_results"}
+_STR_SEARCH = {"RESEARCHPILOT_SEARCH_PROVIDER": "provider"}
 _STR_LLM = {
     "RESEARCHPILOT_LLM_PROVIDER": "provider",
     "RESEARCHPILOT_LLM_BASE_URL": "base_url",
@@ -104,7 +106,10 @@ _STR_LLM = {
 }
 _FLOAT_LLM = {"RESEARCHPILOT_LLM_TIMEOUT": "timeout_s"}
 _SECRET_LLM = {"RESEARCHPILOT_LLM_API_KEY": "api_key"}
-_SECRET_SEARCH = {"RESEARCHPILOT_SEARCH_API_KEY": "api_key"}
+_SECRET_SEARCH = {
+    "TAVILY_API_KEY": "api_key",
+    "RESEARCHPILOT_SEARCH_API_KEY": "api_key",
+}
 
 
 def _collect(

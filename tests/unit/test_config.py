@@ -79,3 +79,29 @@ def test_config_is_frozen() -> None:
 def test_unknown_env_keys_ignored() -> None:
     config = Config.from_env({"RESEARCHPILOT_NOT_A_SETTING": "x"})
     assert config == Config()
+
+
+def test_search_defaults_to_tavily() -> None:
+    config = Config()
+    assert config.search.provider == "tavily"
+    assert config.search.api_key is None
+
+
+def test_tavily_api_key_env_populates_search_key() -> None:
+    config = Config.from_env({"TAVILY_API_KEY": "tvly-abc"})
+    assert config.search.api_key is not None
+    assert config.search.api_key.get_secret_value() == "tvly-abc"
+    assert "tvly-abc" not in repr(config)
+
+
+def test_generic_search_key_takes_precedence_over_tavily() -> None:
+    config = Config.from_env(
+        {"TAVILY_API_KEY": "tvly-generic", "RESEARCHPILOT_SEARCH_API_KEY": "generic-override"}
+    )
+    assert config.search.api_key is not None
+    assert config.search.api_key.get_secret_value() == "generic-override"
+
+
+def test_search_provider_env_override() -> None:
+    config = Config.from_env({"RESEARCHPILOT_SEARCH_PROVIDER": "custom"})
+    assert config.search.provider == "custom"

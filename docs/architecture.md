@@ -44,8 +44,9 @@ xiarch/                          # repo root = project root (see deviation D1)
 │   │   ├── plan.py              # Plan, PlanStep, StepStatus
 │   │   ├── evidence.py          # Evidence, NumericFact, EvidenceVerification, Source, ...
 │   │   ├── report.py            # Report, Finding, SourceRef, ExecutionSummary, FailureRecord
-│   │   └── events.py            # ExecutionEvent, EventKind, FailureKind, ToolResult
+│   │   ├── events.py            # ExecutionEvent, EventKind, FailureKind, ToolResult
 │   │                            #   (grouped as "runtime execution records" — deviation D9)
+│   │   └── tool_io.py           # tool I/O contracts (Phase 3 addition — deviation D10)
 │   ├── memory/
 │   │   ├── __init__.py
 │   │   └── sqlite.py            # optional per-query run history (§17)
@@ -89,6 +90,7 @@ xiarch/                          # repo root = project root (see deviation D1)
 | D7 | New `reliability/runner.py` | The single seam that composes *validate → timeout → retry → classify → emit events* around every tool call. Keeps `retry.py`/`timeout.py` as pure primitives and tools as pure `execute()` bodies — this is what makes §19's deterministic-runtime-around-the-LLM split real instead of aspirational. |
 | D8 | New `tests/failure/` directory | §20 names failure tests as a third category; robustness carries 20% rubric weight and deserves a visible home next to `unit/` and `integration/`. |
 | D9 | `EventKind` extends §13's list | §13 says events must *cover* the listed names — a floor, not a ceiling. Added: `goal_normalized`, `plan_invalid`, `step_failed`, `source_unavailable`, `candidate_advanced`, `evidence_rejected`, `evidence_conflict`, `run_completed`. Every extension exists to make a recovery or rejection path visible in transcripts. |
+| D10 | New `app/models/tool_io.py` | Phase 3 turned §3's "tool schemas (contracts only)" into real models. They must be importable by the tools, by `researcher.py` in Phase 5, and by tests; `models/` is already the data-contract package, while duplicating the schemas inside each tool module would fragment them. |
 
 `reports/` output is gitignored; the three deliverable transcripts live in
 `examples/sample_runs/` instead (curated deliverables, not build artifacts).
@@ -436,8 +438,11 @@ class SearchOutput(BaseModel):
     retrieved_at: datetime
 ```
 
-The provider is chosen in Phase 3 (free-tier API per §3) and swappable behind
-this interface.
+Provider (chosen in Phase 3): **Tavily** — free tier, 1,000 searches/month
+(§3 budget), authenticated with `Authorization: Bearer <TAVILY_API_KEY>` via
+`TAVILY_API_KEY` in `.env.example`; swappable behind this interface.
+`published_at` stays `None` unless the provider returns `published_date`
+(only for `topic="news"` queries) — absent metadata is never fabricated.
 
 **2. `webpage_fetch`**
 

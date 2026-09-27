@@ -20,6 +20,10 @@ dev = [
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
+addopts = "-m 'not live'"
+markers = [
+    "live: hits real external APIs; excluded from the default offline run",
+]
 
 [tool.ruff]
 line-length = 100

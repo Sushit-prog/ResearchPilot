@@ -1,0 +1,43 @@
+{
+  "query": "python 3.14 release",
+  "response_time": 1.23,
+  "results": [
+    {
+      "title": "Python 3.14 Release Notes",
+      "url": "https://docs.python.org/3.14/whatsnew.html",
+      "content": "Python 3.14 is the newest feature release of the Python programming language.",
+      "score": 0.97,
+      "published_date": "2025-10-07T00:00:00"
+    },
+    {
+      "title": "Python Insider Blog",
+      "url": "https://blog.python.org/2025/10/python-314/",
+      "content": "Announcing the release of Python 3.14.",
+      "score": 0.92
+    },
+    {
+      "title": "Not A Real Result",
+      "url": "javascript:alert(1)",
+      "content": "This URL must be dropped by scheme validation.",
+      "score": 0.5
+    },
+    {
+      "url": "https://example.com/missing-title",
+      "content": "This result has no title and must be dropped.",
+      "score": 0.4
+    },
+    {
+      "title": "Unparsable Date",
+      "url": "https://example.org/news",
+      "content": "published_date cannot be parsed and must become None.",
+      "score": 0.3,
+      "published_date": "not-a-date"
+    },
+    {
+      "title": "Credentialed URL",
+      "url": "https://user:pass@example.net/x",
+      "content": "Embedded credentials must be dropped.",
+      "score": 0.2
+    }
+  ]
+}
