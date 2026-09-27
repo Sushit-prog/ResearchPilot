@@ -6,7 +6,7 @@ from app.agent.executor import StepOutcome
 from app.agent.orchestrator import Orchestrator
 from app.config import Config
 from app.models.events import EventKind, ExecutionEvent, ToolResult
-from app.models.evidence import Evidence, Source
+from app.models.evidence import Evidence, Source, SourceStatus
 from app.observability import EventEmitter, InMemoryEventSink
 
 FIXED_TIME = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
@@ -106,15 +106,18 @@ def _make_orchestrator(
     registry,
     fixed_clock,
     valid_plan_json,
+    synthesis_json,
+    citations: list[tuple[str, str | None]],
+    report_dir: str,
 ) -> tuple[Orchestrator, list[ExecutionEvent]]:
     events: list[ExecutionEvent] = []
     emitter = EventEmitter(fixed_clock, sinks=[InMemoryEventSink(events)])
     orchestrator = Orchestrator(
         "What is X?",
-        llm=fake_llm(valid_plan_json),
+        llm=fake_llm(valid_plan_json, synthesis_json(citations)),
         registry=registry,
         handler=handler,  # type: ignore[arg-type]
-        config=Config(),
+        config=Config(report_dir=report_dir),
         clock=fixed_clock,
         emitter=emitter,
     )
@@ -126,14 +129,21 @@ def _kinds(events: list[ExecutionEvent]) -> list[EventKind]:
 
 
 async def test_pipeline_dedups_and_filters_before_sufficiency(
-    fake_llm, registry, fixed_clock, valid_plan_json
+    fake_llm, registry, fixed_clock, valid_plan_json, synthesis_json, tmp_path
 ) -> None:
     orchestrator, events = _make_orchestrator(
-        MessyEvidenceHandler(), fake_llm, registry, fixed_clock, valid_plan_json
+        MessyEvidenceHandler(),
+        fake_llm,
+        registry,
+        fixed_clock,
+        valid_plan_json,
+        synthesis_json,
+        [("ev-a", "https://example.com/a"), ("ev-d", "https://example.net/d"), ("ev-x", None)],
+        str(tmp_path),
     )
     state = await orchestrator.run()
 
-    assert state.status.value == "executing"
+    assert state.status.value == "completed"
     assert [item.evidence_id for item in state.evidence] == ["ev-a", "ev-d", "ev-x"]
     dedup_events = [event for event in events if event.event is EventKind.EVIDENCE_DEDUPLICATED]
     reject_events = [event for event in events if event.event is EventKind.EVIDENCE_REJECTED]
@@ -149,10 +159,17 @@ async def test_pipeline_dedups_and_filters_before_sufficiency(
     assert state.warnings[0].startswith("evidence ev-c rejected: relevance")
     assert not any("thresholds" in warning for warning in state.warnings)
     assert state.retry_counts == {"r1:web_search:1": 0, "q1:calculator:1": 0}
+    # filtering drops Evidence, never Source rows: REJECTED has no setter (docs §D-note)
+    assert all(source.status is not SourceStatus.REJECTED for source in state.sources)
+    assert state.final_report is not None
+    summary = state.final_report.execution_summary
+    assert summary.sources_searched == 3
+    assert summary.sources_used == 2
+    assert summary.sources_rejected == summary.sources_searched - summary.sources_used
 
 
 async def test_dedup_before_sufficiency_triggers_insufficient_warning(
-    fake_llm, registry, fixed_clock, valid_plan_json
+    fake_llm, registry, fixed_clock, valid_plan_json, synthesis_json, tmp_path
 ) -> None:
     class ThinHandler(MessyEvidenceHandler):
         async def handle(self, step) -> StepOutcome:
@@ -183,7 +200,14 @@ async def test_dedup_before_sufficiency_triggers_insufficient_warning(
             )
 
     orchestrator, events = _make_orchestrator(
-        ThinHandler(), fake_llm, registry, fixed_clock, valid_plan_json
+        ThinHandler(),
+        fake_llm,
+        registry,
+        fixed_clock,
+        valid_plan_json,
+        synthesis_json,
+        [("ev-a", "https://example.com/a"), ("ev-x", None)],
+        str(tmp_path),
     )
     state = await orchestrator.run()
 
@@ -194,7 +218,7 @@ async def test_dedup_before_sufficiency_triggers_insufficient_warning(
 
 
 async def test_numeric_conflict_flows_into_state_warnings_and_retry_counts(
-    fake_llm, fixed_clock, valid_plan_json
+    fake_llm, fixed_clock, valid_plan_json, synthesis_json, tmp_path
 ) -> None:
     from app.tools.base import ToolRegistry
     from app.tools.calculator import CalculatorTool
@@ -209,6 +233,9 @@ async def test_numeric_conflict_flows_into_state_warnings_and_retry_counts(
         real_registry,
         fixed_clock,
         valid_plan_json,
+        synthesis_json,
+        [("ev-a", "https://example.com/a"), ("ev-d", "https://example.net/d"), ("ev-x", None)],
+        str(tmp_path),
     )
     state = await orchestrator.run()
 
@@ -231,10 +258,27 @@ async def test_numeric_conflict_flows_into_state_warnings_and_retry_counts(
 
 
 async def test_clean_run_emits_no_evidence_pipeline_events(
-    fake_llm, registry, fixed_clock, valid_plan_json, evidence_handler
+    fake_llm,
+    registry,
+    fixed_clock,
+    valid_plan_json,
+    synthesis_json,
+    evidence_handler,
+    tmp_path,
 ) -> None:
     orchestrator, events = _make_orchestrator(
-        evidence_handler, fake_llm, registry, fixed_clock, valid_plan_json
+        evidence_handler,
+        fake_llm,
+        registry,
+        fixed_clock,
+        valid_plan_json,
+        synthesis_json,
+        [
+            ("ev-a", "https://example.com/a"),
+            ("ev-b", "https://example.org/b"),
+            ("ev-c", None),
+        ],
+        str(tmp_path),
     )
     state = await orchestrator.run()
 
@@ -246,4 +290,10 @@ async def test_clean_run_emits_no_evidence_pipeline_events(
         EventKind.EVIDENCE_CONFLICT,
     }
     assert not any(event.event in pipeline_kinds for event in events)
-    assert _kinds(events) == [EventKind.GOAL_NORMALIZED, EventKind.PLAN_CREATED]
+    assert _kinds(events) == [
+        EventKind.GOAL_NORMALIZED,
+        EventKind.PLAN_CREATED,
+        EventKind.SYNTHESIS_STARTED,
+        EventKind.REPORT_GENERATED,
+        EventKind.RUN_COMPLETED,
+    ]

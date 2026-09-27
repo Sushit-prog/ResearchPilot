@@ -33,6 +33,7 @@ class FailureRecord(BaseModel):
     tool: str
     failure_kind: FailureKind
     message: str
+    unclassified: bool = False       # D11 flag surfaced into the report (D12)
 
 
 class ExecutionSummary(BaseModel):
@@ -44,7 +45,8 @@ class ExecutionSummary(BaseModel):
     steps_failed: int
     sources_searched: int
     sources_used: int
-    sources_rejected: int
+    sources_rejected: int            # = searched − used (arithmetic; Source.status
+                                     # REJECTED has no setter in v1)
     tool_calls: int
     retries: int
     failures: list[FailureRecord]      # §12: failures ALWAYS surface here

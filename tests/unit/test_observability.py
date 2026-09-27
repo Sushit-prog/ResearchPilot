@@ -104,3 +104,43 @@ def test_successful_first_attempt_is_quiet_without_verbose(fixed_clock) -> None:
     emitter = EventEmitter(fixed_clock, sinks=[sink])
     emitter.emit(EventKind.TOOL_SUCCEEDED, tool="web_search", attempt=1)
     assert buffer.getvalue() == ""
+
+
+def test_renders_synthesis_started(fixed_clock) -> None:
+    sink, buffer = _console()
+    emitter = EventEmitter(fixed_clock, sinks=[sink])
+    emitter.emit(EventKind.SYNTHESIS_STARTED, message="What is X?", data={"evidence": 3})
+    assert buffer.getvalue().strip() == (
+        "[SYNTHESIS] composing report from 3 evidence items"
+    )
+
+
+def test_renders_report_generated(fixed_clock) -> None:
+    sink, buffer = _console()
+    emitter = EventEmitter(fixed_clock, sinks=[sink])
+    emitter.emit(
+        EventKind.REPORT_GENERATED,
+        data={"path": "reports/what-is-x.md", "findings": 3, "evidence": 4},
+    )
+    assert buffer.getvalue().strip() == (
+        "[REPORT] reports/what-is-x.md — 3 findings from 4 evidence items"
+    )
+
+
+def test_renders_run_completed(fixed_clock) -> None:
+    sink, buffer = _console()
+    emitter = EventEmitter(fixed_clock, sinks=[sink])
+    emitter.emit(
+        EventKind.RUN_COMPLETED,
+        status="completed",
+        data={
+            "status": "completed",
+            "steps": 2,
+            "failures": 1,
+            "retries": 2,
+            "duration_s": 0.4,
+        },
+    )
+    assert buffer.getvalue().strip() == (
+        "[DONE] completed — 2 steps, 1 failures, 2 retries, 0.4s"
+    )

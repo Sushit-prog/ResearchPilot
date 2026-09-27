@@ -35,6 +35,7 @@ class Config(BaseModel, frozen=True):
     search: SearchConfig = SearchConfig()
     retry: RetryConfig = RetryConfig()
     max_plan_attempts: int = 3
+    max_synthesis_attempts: int = 2
     max_steps: int = 12
     candidate_cap: int = 3
     min_evidence: int = 3
@@ -79,6 +80,7 @@ class Config(BaseModel, frozen=True):
 
 _INT_TOP = {
     "RESEARCHPILOT_MAX_PLAN_ATTEMPTS": "max_plan_attempts",
+    "RESEARCHPILOT_MAX_SYNTHESIS_ATTEMPTS": "max_synthesis_attempts",
     "RESEARCHPILOT_MAX_STEPS": "max_steps",
     "RESEARCHPILOT_CANDIDATE_CAP": "candidate_cap",
     "RESEARCHPILOT_MIN_EVIDENCE": "min_evidence",

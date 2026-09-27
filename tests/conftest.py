@@ -152,6 +152,65 @@ def valid_plan_json() -> str:
 
 
 @pytest.fixture
+def synthesis_json() -> Callable[..., str]:
+    def _make(
+        citations: list[tuple[str, str | None]],
+        *,
+        question: str = "What is X?",
+        contradictions: list[str] | None = None,
+        insights: list[str] | None = None,
+        executive_summary: str = "Evidence-based summary.",
+    ) -> str:
+        findings = [
+            {
+                "index": index,
+                "claim": f"Finding {index} from {evidence_id}",
+                "evidence_id": evidence_id,
+                "source_url": url,
+                "source_title": "Example",
+                "confidence": 0.9,
+            }
+            for index, (evidence_id, url) in enumerate(citations, start=1)
+        ]
+        payload = {
+            "research_question": question,
+            "executive_summary": executive_summary,
+            "key_findings": findings,
+            "important_evidence": [
+                {"evidence_id": evidence_id, "excerpt": "placeholder excerpt"}
+                for evidence_id, _url in citations
+            ],
+            "contradictions": contradictions or [],
+            "actionable_insights": insights or ["Monitor the topic."],
+            "sources": [
+                {
+                    "index": 1,
+                    "url": "https://placeholder.example",
+                    "title": None,
+                    "domain": "placeholder.example",
+                }
+            ],
+            "execution_summary": {
+                "started_at": "2026-01-01T12:00:00Z",
+                "finished_at": "2026-01-01T12:00:00Z",
+                "duration_s": 0.0,
+                "steps_total": 0,
+                "steps_succeeded": 0,
+                "steps_failed": 0,
+                "sources_searched": 0,
+                "sources_used": 0,
+                "sources_rejected": 0,
+                "tool_calls": 0,
+                "retries": 0,
+                "failures": [],
+            },
+        }
+        return json.dumps(payload)
+
+    return _make
+
+
+@pytest.fixture
 def evidence_factory() -> Callable[..., Evidence]:
     def _make(
         evidence_id: str,

@@ -43,6 +43,10 @@ class EvidenceValidationError(ResearchPilotError):
     failure_kind = FailureKind.VALIDATION_ERROR
 
 
+class SynthesisError(ResearchPilotError):
+    failure_kind = FailureKind.VALIDATION_ERROR
+
+
 class ConfigurationError(ResearchPilotError):
     failure_kind = None
 

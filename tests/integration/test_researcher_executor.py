@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -132,6 +133,8 @@ async def test_execute_plan_runs_researcher_through_untouched_executor() -> None
 
 async def test_orchestrator_end_to_end_books_retries_and_shares_emitter(
     fake_llm,
+    synthesis_json,
+    tmp_path,
 ) -> None:
     events: list[Any] = []
     emitter = EventEmitter(lambda: FIXED_TIME, sinks=[InMemoryEventSink(events)])
@@ -139,10 +142,20 @@ async def test_orchestrator_end_to_end_books_retries_and_shares_emitter(
 
     orchestrator = Orchestrator(
         "explain the mission in numbers",
-        llm=fake_llm(json.dumps(PLAN_DATA)),
+        llm=fake_llm(
+            json.dumps(PLAN_DATA),
+            synthesis_json(
+                [
+                    ("r1:2", "https://example.com/one"),
+                    ("r1:3", "https://example.org/two"),
+                    ("q1:1", None),
+                ],
+                question="explain the mission in numbers",
+            ),
+        ),
         registry=registry,
         handler=researcher,
-        config=Config(),
+        config=Config(report_dir=str(tmp_path)),
         clock=lambda: FIXED_TIME,
         emitter=emitter,
     )
@@ -151,12 +164,15 @@ async def test_orchestrator_end_to_end_books_retries_and_shares_emitter(
 
     state = await orchestrator.run()
 
-    assert state.status is AgentStatus.EXECUTING
+    assert state.status is AgentStatus.COMPLETED
     assert [record.step_id for record in state.completed_steps] == ["r1", "q1"]
     assert state.failed_steps == []
     assert state.warnings == []
     assert len(state.evidence) == 3
     assert len(state.sources) == 2
+    assert state.final_report is not None
+    assert state.report_path is not None
+    assert Path(state.report_path).parent == tmp_path
     assert delays == [0.0]
     assert state.retry_counts == {
         "r1:web_search:1": 1,

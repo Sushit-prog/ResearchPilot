@@ -92,6 +92,16 @@ xiarch/                          # repo root = project root (see deviation D1)
 | D9 | `EventKind` extends §13's list | §13 says events must *cover* the listed names — a floor, not a ceiling. Added: `goal_normalized`, `plan_invalid`, `step_failed`, `source_unavailable`, `candidate_advanced`, `evidence_rejected`, `evidence_conflict`, `run_completed`. Every extension exists to make a recovery or rejection path visible in transcripts. |
 | D10 | New `app/models/tool_io.py` | Phase 3 turned §3's "tool schemas (contracts only)" into real models. They must be importable by the tools, by `researcher.py` in Phase 5, and by tests; `models/` is already the data-contract package, while duplicating the schemas inside each tool module would fragment them. |
 | D11 | `ToolResult.unclassified: bool = False` + `runner.is_unclassified()` | A code bug (e.g. `IndexError`) that matches no row of `classify()`'s table still classifies `PERMANENT` — correct for retry safety, but it made a genuine bug indistinguishable from a known permanent failure like a 404. The additive field (default `False`) tags the ToolResult, the `tool_failed` event carries `data={"unclassified": true, "error_type": ...}` (free-form `data`, §13-sanctioned), and the console renders `[WARN] unexpected error type: ...` instead of the normal failure line. Taxonomy untouched: still §12's five kinds, still no retry-loop. |
+| D12 | `FailureRecord.unclassified: bool = False` | D11's flag died at the report boundary: `Report.execution_summary.failures` is the surface a reviewer actually reads, and a code bug listed there without the marker looks identical to a known permanent failure. The additive field (default `False`) is populated from the failed step's `ToolResult`s via `StepRecord.result_ids`; `render_markdown` appends `UNCLASSIFIED` to the failure line. Related: a `StepRecord.failure_kind` of `None` (handler-declared failure) records as `PERMANENT` — the same conservative fallback `classify()` uses. |
+| D13 | `AgentState.report_path: str | None = None` | §4.13's memory row must store the report path, and the report file is the primary deliverable — the path has to be auditable from state, not reconstructed from the goal slug. Additive field (default `None` until a file is written; stays `None` on failed runs). |
+
+**`SourceStatus.REJECTED` has no assignment site in v1.** Sources are only ever
+constructed `AVAILABLE` (fetch succeeded) or `UNAVAILABLE` (retries + candidate
+exhaustion); `filter_evidence` drops `Evidence` objects, never `Source` rows —
+the member is reserved exactly as §4.5 reserves `depends_on`. Chosen semantics:
+`ExecutionSummary.sources_rejected = sources_searched − sources_used`,
+arithmetic over distinct normalized URLs vs. distinct evidence URLs, **not** a
+count of `REJECTED`-status sources (which would be structurally zero today).
 
 `reports/` output is gitignored; the three deliverable transcripts live in
 `examples/sample_runs/` instead (curated deliverables, not build artifacts).
@@ -301,6 +311,7 @@ class FailureRecord(BaseModel):
     tool: str
     failure_kind: FailureKind
     message: str
+    unclassified: bool = False       # D11 flag surfaced into the report (D12)
 
 class ExecutionSummary(BaseModel):
     started_at: datetime
@@ -311,7 +322,8 @@ class ExecutionSummary(BaseModel):
     steps_failed: int
     sources_searched: int
     sources_used: int
-    sources_rejected: int
+    sources_rejected: int            # = searched − used (arithmetic; Source.status
+                                     # REJECTED has no setter in v1)
     tool_calls: int
     retries: int
     failures: list[FailureRecord]      # §12: failures ALWAYS surface here
@@ -345,6 +357,7 @@ class AgentState(BaseModel):
     warnings: list[str] = []
     execution_events: list[ExecutionEvent] = []
     final_report: Report | None = None
+    report_path: str | None = None   # written report file (§4.13 memory row uses it)
     status: AgentStatus = AgentStatus.INIT
 ```
 
@@ -409,6 +422,7 @@ ResearchPilotError
 ├── PlanValidationError           → VALIDATION_ERROR (plan-correction loop, not tool retry)
 ├── PlannerError                  → PLANNER_ERROR    (correction loop exhausted)
 ├── EvidenceValidationError       → VALIDATION_ERROR (evidence dropped + event, run continues)
+├── SynthesisError                → VALIDATION_ERROR (report-correction loop exhausted → run fails, no report)
 ├── ToolNotFoundError             → (no kind — internal invariant violation)
 └── ConfigurationError            → run aborts before planning (clear CLI message)
 ```
@@ -781,10 +795,14 @@ never raw web text (§9). `synthesis_started` event. Output parsed into
    `state.evidence`; its `source_url` must match the evidence (None allowed
    only for calculator-derived). Violations → one bounded correction with the
    violation list fed back; findings that still don't resolve are **dropped
-   with a warning** (never emitted). No unsupported attribution leaves this
-   stage (§9).
+   with a warning** (never emitted) and surviving findings are **re-indexed
+   1..k** so §15 numbering stays contiguous — drops surface as a warning +
+   ExecutionSummary entry, never as index gaps. No unsupported attribution
+   leaves this stage (§9).
 2. **Section completeness:** all §15 sections present and typed → else the
    same bounded correction loop (`max_synthesis_attempts`, default 2).
+   Exhausted with a structurally invalid payload → `SynthesisError` → run
+   `FAILED`, no report file (symmetric with planner exhaustion).
 
 Then `render_markdown(report)` — a pure function → `reports/<slug>.md` (slug
 derived from goal, path-traversal-safe, §26) → `report_generated` event →

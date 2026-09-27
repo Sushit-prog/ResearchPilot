@@ -90,6 +90,27 @@ class ConsoleEventSink:
             return self._detail(event) if self.verbose else None
         if kind is EventKind.STEP_FAILED:
             return f"[WARN] step {event.step_id} failed: {event.message or ''}"
+        if kind is EventKind.SYNTHESIS_STARTED:
+            return (
+                f"[SYNTHESIS] composing report from "
+                f"{event.data.get('evidence', 0)} evidence items"
+            )
+        if kind is EventKind.REPORT_GENERATED:
+            header = (
+                f"[REPORT] {event.data.get('path', '')} — "
+                f"{event.data.get('findings', 0)} findings from "
+                f"{event.data.get('evidence', 0)} evidence items"
+            )
+            summary = [f"  {line}" for line in event.data.get("summary", [])]
+            return "\n".join([header, *summary])
+        if kind is EventKind.RUN_COMPLETED:
+            return (
+                f"[DONE] {event.data.get('status', event.status or '')} — "
+                f"{event.data.get('steps', 0)} steps, "
+                f"{event.data.get('failures', 0)} failures, "
+                f"{event.data.get('retries', 0)} retries, "
+                f"{event.data.get('duration_s', 0.0):.1f}s"
+            )
         return self._detail(event) if self.verbose else None
 
     @staticmethod

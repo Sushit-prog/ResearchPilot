@@ -22,6 +22,7 @@ ENV = {
 def test_defaults_match_doc_section_6() -> None:
     config = Config()
     assert config.max_plan_attempts == 3
+    assert config.max_synthesis_attempts == 2
     assert config.max_steps == 12
     assert config.candidate_cap == 3
     assert config.min_evidence == 3
@@ -46,6 +47,11 @@ def test_from_env_overrides_top_level_and_nested() -> None:
     assert config.llm.model == "gpt-x"
     assert config.report_dir == "out"
     assert config.candidate_cap == 3
+
+
+def test_max_synthesis_attempts_env_override() -> None:
+    config = Config.from_env({"RESEARCHPILOT_MAX_SYNTHESIS_ATTEMPTS": "4"})
+    assert config.max_synthesis_attempts == 4
 
 
 def test_api_key_is_secret_and_absent_from_repr() -> None:

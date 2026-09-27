@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from app.agent.executor import StepHandler, execute_plan
 from app.agent.planner import generate_plan, normalize_goal
 from app.agent.state import AgentState, AgentStatus
+from app.agent.synthesizer import execution_summary_lines, synthesize, write_report
 from app.agent.verifier import (
     Sufficiency,
     deduplicate_evidence,
@@ -14,7 +15,7 @@ from app.agent.verifier import (
     numeric_pass,
 )
 from app.config import Config
-from app.errors import PlannerError, PlanValidationError
+from app.errors import PlannerError, PlanValidationError, SynthesisError
 from app.llm.base import LLMProvider
 from app.models.events import EventKind
 from app.models.plan import PlanStep, StepStatus
@@ -63,6 +64,7 @@ class Orchestrator:
     async def run(self) -> AgentState:
         state = self.state
         emitter = self._emitter
+        started_at = self._clock()
 
         normalized = normalize_goal(state.user_goal)
         state.normalized_goal = normalized
@@ -144,8 +146,63 @@ class Orchestrator:
         if sufficiency is Sufficiency.EMPTY:
             state.status = AgentStatus.FAILED
             state.warnings.append("no evidence collected — no report possible")
-        elif sufficiency is Sufficiency.INSUFFICIENT:
+            _emit_run_completed(emitter, state, started_at=started_at, clock=self._clock)
+            return state
+        if sufficiency is Sufficiency.INSUFFICIENT:
             state.warnings.append(
                 "evidence below thresholds — synthesis must degrade, not claim completeness"
             )
+
+        state.status = AgentStatus.SYNTHESIZING
+        try:
+            report = await synthesize(
+                self._llm,
+                state,
+                config=self.config,
+                emitter=emitter,
+                clock=self._clock,
+                started_at=started_at,
+            )
+        except SynthesisError as exc:
+            state.status = AgentStatus.FAILED
+            state.warnings.append(str(exc))
+            _emit_run_completed(emitter, state, started_at=started_at, clock=self._clock)
+            return state
+        state.final_report = report
+        path = write_report(
+            report, report_dir=self.config.report_dir, goal=state.user_goal
+        )
+        state.report_path = path
+        emitter.emit(
+            EventKind.REPORT_GENERATED,
+            message=path,
+            data={
+                "path": path,
+                "findings": len(report.key_findings),
+                "evidence": len(state.evidence),
+                "summary": execution_summary_lines(report.execution_summary),
+            },
+        )
+        state.status = AgentStatus.COMPLETED
+        _emit_run_completed(emitter, state, started_at=started_at, clock=self._clock)
         return state
+
+
+def _emit_run_completed(
+    emitter: EventEmitter,
+    state: AgentState,
+    *,
+    started_at: datetime,
+    clock: Callable[[], datetime],
+) -> None:
+    emitter.emit(
+        EventKind.RUN_COMPLETED,
+        status=state.status.value,
+        data={
+            "status": state.status.value,
+            "steps": len(state.plan.steps) if state.plan else 0,
+            "failures": len(state.failed_steps),
+            "retries": sum(state.retry_counts.values()),
+            "duration_s": max((clock() - started_at).total_seconds(), 0.0),
+        },
+    )

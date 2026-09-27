@@ -23,6 +23,7 @@ def test_agent_state_field_list_matches_spec() -> None:
         "warnings",
         "execution_events",
         "final_report",
+        "report_path",
         "status",
     ]
 
@@ -52,6 +53,7 @@ def test_agent_state_defaults() -> None:
     assert state.warnings == []
     assert state.execution_events == []
     assert state.final_report is None
+    assert state.report_path is None
     assert state.status is AgentStatus.INIT
 
 

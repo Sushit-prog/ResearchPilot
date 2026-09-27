@@ -146,6 +146,7 @@ def test_failure_record_requires_kind() -> None:
         }
     )
     assert record.failure_kind is FailureKind.TRANSIENT
+    assert record.unclassified is False
     with pytest.raises(pydantic.ValidationError):
         FailureRecord.model_validate({"step_id": "r1", "tool": "t", "message": "m"})
 

@@ -46,4 +46,5 @@ class AgentState(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     execution_events: list[ExecutionEvent] = Field(default_factory=list)
     final_report: Report | None = None
+    report_path: str | None = None   # written report file (§4.13 memory row uses it)
     status: AgentStatus = AgentStatus.INIT
