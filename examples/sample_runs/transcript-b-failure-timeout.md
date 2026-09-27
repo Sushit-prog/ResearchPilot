@@ -1,0 +1,120 @@
+# Transcript B — Induced failure (`--simulate-failure timeout`) and recovery
+
+Real live run: Tavily search + `openai/gpt-oss-120b` on the Groq API. The
+command adds `--simulate-failure timeout`, which arms a **one-shot** failure on
+the run's first network tool call (shared `FailureArm` consumed by whichever of
+`web_search` / `webpage_fetch` executes first — here, `web_search`). Captured
+2026-09-28. Exit code `0`; **total wall time 49.3 s (measured)**, agent-reported
+duration 48.5 s — see the timing note below.
+
+## Command
+
+```powershell
+# same environment as transcript A (TAVILY_API_KEY + Groq — see .env.example)
+uv run research-agent --query "What are the main causes of HTTP 429 rate limit errors and standard client-side mitigation strategies?" --output "reports/b" --simulate-failure timeout
+```
+
+## Reading the timing (important — also cited in the README)
+
+There is a **real ~10-second pause** between `[1/1] doing …` and
+`[WARN] web_search failed (transient): operation exceeded 10.0s`. The pause is
+not a stall and not a fabricated log line:
+
+- What is induced: `ArmedTool` makes the *first network call* artificially
+  slow by sleeping `default_timeout_s + 1` (11 s) — nothing else.
+- What is real: the wait itself is the runner's own `asyncio.wait_for`
+  deadline (`web_search`'s 10 s timeout) firing, then the untouched failure
+  path — classification as `transient`, the `operation exceeded 10.0s` error
+  message, exponential backoff, a retry through the regular tool call,
+  `[RECOVERED]`. This is the exact code path a genuinely slow endpoint hits;
+  only the slowness is injected, never the timeout handling.
+- The arm is one-shot: after search attempt 1 consumes it, every later call
+  passes straight through. The three subsequent `webpage_fetch` timeouts in
+  this run were **not** injected — the candidate pages were genuinely slow to
+  respond on the capture-date network and each hit the same real 10 s
+  deadline. Retries were exhausted (3 attempts), the source was marked
+  unavailable, the run continued with other evidence, and the report still
+  shipped (§12: "continue if enough evidence remains"). `[RETRY] …` lines
+  echo the failure message they are retrying from.
+- Corroboration: 49.3 s wall vs 11.6 s for the normal run of similar shape
+  (transcript A); `[DONE]` reports 48.5 s internal duration — about 10 s of
+  injected wait plus ~30 s of real fetch waits.
+
+The planner chose a single combined research step for this goal
+(`[1/1]`); the search → fetch → extract sequence still runs inside that step.
+
+## stdout (verbatim)
+
+```text
+[GOAL] What are the main causes of HTTP 429 rate limit errors and standard client-side mitigation strategies?
+[PLAN] 1 steps:
+  1. step1 [web_search] Identify the primary reasons servers return HTTP 429 responses and the typical client‑side techniques used to handle or avoid them.
+[1/1] doing Identify the primary reasons servers return HTTP 429 responses and the typical client‑side techniques used to handle or avoid them....
+[WARN] web_search failed (transient): operation exceeded 10.0s
+[RETRY] web_search attempt 2: operation exceeded 10.0s
+[RECOVERED] web_search succeeded on attempt 2
+[WARN] webpage_fetch failed (transient): operation exceeded 10.0s
+[RETRY] webpage_fetch attempt 2: operation exceeded 10.0s
+[WARN] webpage_fetch failed (transient): operation exceeded 10.0s
+[RETRY] webpage_fetch attempt 3: operation exceeded 10.0s
+[WARN] webpage_fetch failed (transient): operation exceeded 10.0s
+[SYNTHESIS] composing report from 2 evidence items
+[REPORT] reports\b\what-are-the-main-causes-of-http-429-rate-limit-errors-and-s.md — 3 findings from 2 evidence items
+  - Duration: 48.5s
+  - Steps: 1 total, 1 succeeded, 0 failed
+  - Sources: 3 searched, 2 used, 1 rejected
+  - Tool calls: 4 | Retries: 3
+  - Failures: none
+[DONE] completed — 1 steps, 0 failures, 3 retries, 48.6s
+```
+
+Recovery arc, plainly visible: **PLAN → TOOL CALL → FAILURE (timeout,
+classified transient) → RETRY (backoff) → RECOVERED → continued execution →
+unavailable-source handling on later fetches → FINAL REPORT.** The run ends
+`exit 0` with a complete report; retries and the exhausted source are counted
+in the Execution Summary (`Retries: 3`, `1 rejected`), not hidden.
+
+## Report (verbatim — `reports/b/what-are-the-main-causes-of-http-429-rate-limit-errors-and-s.md`)
+
+```markdown
+# ResearchPilot Report
+
+## Research Question
+What are the main causes of HTTP 429 rate limit errors and standard client-side mitigation strategies?
+
+## Executive Summary
+HTTP 429 errors signal that a client has sent too many requests in a given time window. The primary causes are exceeding server‑enforced rate limits, burst traffic, and misconfigured client request patterns. Standard client‑side mitigations include respecting the Retry‑After header, implementing exponential backoff, adding client‑side throttling, and using caching to reduce request volume.
+
+## Key Findings
+1. The MDN documentation defines HTTP 429 as "Too Many Requests", indicating that the client has sent too many requests in a given amount of time.
+   Source: 429 Too Many Requests - HTTP | MDN — https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/429 (confidence 0.70)
+2. Common causes of 429 errors include exceeding API rate limits, burst traffic, and client misconfiguration that leads to rapid request loops.
+   Source: HTTP Error 429 (Too Many Requests) - How to Fix — https://blog.postman.com/http-error-429/ (confidence 0.70)
+3. Standard client‑side mitigation strategies are to respect the Retry‑After header, implement exponential backoff, add client‑side throttling, and cache responses where possible.
+   Source: HTTP Error 429 (Too Many Requests) - How to Fix — https://blog.postman.com/http-error-429/ (confidence 0.70)
+
+## Important Evidence
+- [step1:2] Skip to main content Skip to search HTML HTML: Markup language HTML reference Elements Global attributes Attributes See all… HTML guides Responsive images HTML cheatsheet Date & time formats See all… Markup languages SVG MathML XML CSS CSS…
+- [step1:4] Skip to content Product DESIGN & BUILD Spec Hub Manage specifications Workspaces Collaborate with teams Mock Servers Simulate API behavior SDK Generator Create SDKs instantly Flows Create visual workflows TEST & VALIDATE API Client Send AP…
+
+## Contradictions / Uncertainty
+- None identified.
+
+## Actionable Insights
+- Implement a request queue with rate‑limiting logic to stay within the server's allowed request quota.
+- Parse and honor the Retry‑After header; pause requests for the indicated duration before retrying.
+- Use exponential backoff (e.g., wait 2^n seconds after each successive 429) to reduce retry storms.
+- Cache idempotent GET responses to avoid unnecessary repeat requests.
+- Monitor API usage metrics and set alerts when approaching rate limits.
+
+## Sources
+1. 429 Too Many Requests - HTTP | MDN — https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/429 (developer.mozilla.org)
+2. HTTP Error 429 (Too Many Requests) - How to Fix — https://blog.postman.com/http-error-429/ (blog.postman.com)
+
+## Execution Summary
+- Duration: 48.5s
+- Steps: 1 total, 1 succeeded, 0 failed
+- Sources: 3 searched, 2 used, 1 rejected
+- Tool calls: 4 | Retries: 3
+- Failures: none
+```

@@ -1,0 +1,23 @@
+flowchart TD
+    U["User goal (CLI --query)"] --> GP["Goal parser — normalize_goal()"]
+    GP --> PL["Planner — LLM (structured plan)"]
+    PL --> PV{"Plan validator (deterministic)<br/>tool in registry? args parse? ids unique?"}
+    PV -- "plan_invalid + feedback<br/>(bounded budget, max 3 attempts)" --> PL
+    PV -- "plan_created — visible trace<br/>goal → numbered plan → [n/N] doing" --> ORCH["Orchestrator<br/>(asyncio phase machine)"]
+    ORCH --> EX["Executor — dispatch, gather,<br/>merge in plan-step order"]
+    EX --> RES["Researcher — search → rank →<br/>fetch candidates → extract evidence"]
+    RES --> RUN["Reliability runner —<br/>validate → timeout → retry → classify → emit"]
+    RUN -- "bounded retry (transient,<br/>exponential backoff)" --> RUN
+    RUN --> TS[("web_search<br/>Tavily")]
+    RUN --> TF[("webpage_fetch<br/>httpx + text extraction")]
+    RUN --> TC[("calculator<br/>whitelisted AST")]
+    RUN --> TM[("failure_simulator / ArmedTool<br/>(test-eval only, --simulate-failure)")]
+    RES --> EV["Evidence pipeline —<br/>relevance filter → dedup → provenance"]
+    EV --> VER["Verifier — numeric cross-check<br/>→ conflict flags"]
+    VER --> SYN["Synthesizer — LLM + citation gate<br/>(deterministic cross-checks first)"]
+    SYN --> REP["Structured Markdown report<br/>(8 auditable sections)"]
+    PL -.-> MEM[("SQLite memory<br/>optional per query")]
+    EV -.-> MEM
+    LLM["LLM provider abstraction<br/>(OpenAI-compatible / fake offline)"] -.-> PL
+    LLM -.-> SYN
+    LOG["Event log — console (+JSONL)<br/>plan/tool/evidence/synthesis events"] -.-> GP & PL & PV & ORCH & RUN & EV & SYN
