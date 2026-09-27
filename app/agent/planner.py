@@ -29,6 +29,14 @@ PLAN_TIME_INVARIANT = (
     "plan arguments."
 )
 
+NO_PLACEHOLDER_RULE = (
+    "Arguments must be literal values computable from the goal — never placeholders "
+    "or result references such as 'URL_FROM_STEP_1' or '{step_1.results[0].url}'. "
+    "The web_search tool fetches result pages itself, so never plan webpage_fetch "
+    "steps to load search results; webpage_fetch accepts only a literal URL that "
+    "appears in the goal."
+)
+
 
 def normalize_goal(goal: str) -> str:
     text = unicodedata.normalize("NFC", goal)
@@ -43,7 +51,7 @@ def build_plan_prompt(goal: str, schemas: dict[str, dict[str, Any]]) -> tuple[st
         f"{json.dumps(schemas, indent=2)}\n\n"
         "Rules: step ids must be unique; each tool must be one of the registered "
         "names; arguments must validate against that tool's input schema; "
-        "expected_output states what the step must produce."
+        f"expected_output states what the step must produce. {NO_PLACEHOLDER_RULE}"
     )
     user = f"Goal:\n{goal}"
     return system, user
@@ -102,6 +110,7 @@ async def generate_plan(
                 "\n\nYour previous output was rejected.\n"
                 f"Previous output:\n{raw}\n"
                 f"Error:\n{exc}\n"
+                f"{NO_PLACEHOLDER_RULE}\n"
                 "Return a corrected plan as JSON only."
             )
             continue

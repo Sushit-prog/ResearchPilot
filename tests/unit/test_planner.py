@@ -113,6 +113,26 @@ async def test_llm_provider_failure_wrapped_as_planner_error(
     assert events == []
 
 
+async def test_prompt_and_correction_feedback_include_placeholder_rule(
+    fake_llm, registry, event_log, valid_plan_json
+) -> None:
+    bad_plan = json.dumps(
+        {
+            "goal": "g",
+            "steps": [
+                _step("r1", tool="webpage_fetch", arguments={"url": "URL_FROM_STEP_1"})
+            ],
+        }
+    )
+    llm = fake_llm(bad_plan, valid_plan_json)
+    emitter, _events = event_log
+    plan = await generate_plan(llm, registry, Config(), emitter, "goal")
+    assert plan.steps[0].id == "r1"
+    assert "web_search tool fetches result pages itself" in llm.calls[0]["system"]
+    assert "never placeholders" in llm.calls[1]["user"]
+    assert "URL_FROM_STEP_1" in llm.calls[1]["user"]
+
+
 async def test_unknown_tool_triggers_correction_then_success(
     fake_llm, registry, event_log, valid_plan_json
 ) -> None:
