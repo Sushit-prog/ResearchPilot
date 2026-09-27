@@ -8,21 +8,13 @@ from urllib.parse import urlparse
 from app.agent.executor import StepOutcome
 from app.config import Config
 from app.models.events import EventKind, FailureKind, ToolResult
-from app.models.evidence import Evidence, Source, SourceQuality, SourceStatus
+from app.models.evidence import Evidence, NumericFact, Source, SourceQuality, SourceStatus
 from app.models.plan import PlanStep
 from app.models.tool_io import CalculatorOutput, FetchOutput, SearchOutput, SearchResultItem
 from app.observability import EventEmitter
 from app.reliability.runner import Runner
+from app.reliability.validation import normalize_url, significant_tokens, term_overlap, term_set
 from app.tools.base import ToolRegistry
-
-_TOKEN_RE = re.compile(r"[a-z0-9]+")
-_STOPWORDS = frozenset(
-    {
-        "the", "and", "for", "with", "what", "how", "why", "when", "where", "from",
-        "that", "this", "are", "was", "were", "its", "into", "than", "then", "who",
-        "which", "about", "over", "under", "between", "during", "after", "before",
-    }
-)
 
 _PRIMARY_SUFFIXES = (".gov", ".edu", ".mil")
 _PRIMARY_HOSTS = frozenset(
@@ -103,7 +95,7 @@ class Researcher:
                 failure_kind=search.failure_kind,
             )
         query = str(step.arguments.get("query", ""))
-        query_terms = _terms(query)
+        query_terms = term_set(query)
         results = SearchOutput.model_validate(search.output).results
         candidates = _rank(results, query_terms)[: self._config.candidate_cap]
 
@@ -217,7 +209,7 @@ class Researcher:
             url=fetched.final_url,
             title=fetched.title,
             text=fetched.text,
-            query_terms=_terms(f"{step.objective} {step.expected_output}"),
+            query_terms=term_set(f"{step.objective} {step.expected_output}"),
             retrieved_at=fetch.started_at,
         )
         evidence: list[Evidence] = []
@@ -291,25 +283,6 @@ class Researcher:
         return StepOutcome(tool_results=[call])
 
 
-def _terms(text: str) -> frozenset[str]:
-    return frozenset(
-        token
-        for token in _TOKEN_RE.findall(text.lower())
-        if len(token) >= 2 and token not in _STOPWORDS
-    )
-
-
-def _relevance(terms: frozenset[str], text: str) -> float:
-    if not terms:
-        return 0.0
-    overlap = len(terms & _terms(text)) / len(terms)
-    return round(min(1.0, max(0.0, overlap)), 3)
-
-
-def _url_key(url: str) -> str:
-    return url.split("#")[0].rstrip("/").lower()
-
-
 def _domain(url: str) -> str:
     return urlparse(url).netloc.lower()
 
@@ -329,7 +302,7 @@ def _rank(
     seen: set[str] = set()
     unique: list[SearchResultItem] = []
     for item in results:
-        key = _url_key(item.url)
+        key = normalize_url(item.url)
         if key in seen:
             continue
         seen.add(key)
@@ -338,7 +311,7 @@ def _rank(
     def sort_key(pair: tuple[int, SearchResultItem]) -> tuple[int, float, int]:
         position, item = pair
         tier = -_TIER_RANK[_quality(item.domain)]
-        relevance = -_relevance(query_terms, f"{item.title} {item.snippet}")
+        relevance = -term_overlap(query_terms, f"{item.title} {item.snippet}")
         return tier, relevance, position
 
     return [item for _, item in sorted(enumerate(unique), key=sort_key)]
@@ -375,8 +348,67 @@ def _web_evidence(
         source_url=url,
         source_title=title,
         extracted_text=normalized[:_EXCERPT_LIMIT],
-        relevance_score=_relevance(query_terms, normalized),
+        relevance_score=term_overlap(query_terms, normalized),
         confidence=_WEB_CONFIDENCE,
         retrieved_at=retrieved_at,
         step_id=step_id,
+        numeric=extract_numeric(normalized),
     )
+
+
+_CURRENCY_RE = re.compile(
+    r"\$\s*(\d[\d,]*(?:\.\d+)?)\s*(trillion|billion|million|thousand|[kKmMbBtT])?\b"
+)
+_PERCENT_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(?:percent|%)", re.IGNORECASE)
+_MEGA_RE = re.compile(r"(\d[\d,]*(?:\.\d+)?)\s*(trillion|billion|million)\s+([A-Za-z][A-Za-z-]*)")
+
+_MAGNITUDE = {
+    "k": 1e3, "m": 1e6, "b": 1e9, "t": 1e12,
+    "thousand": 1e3, "million": 1e6, "billion": 1e9, "trillion": 1e12,
+}
+_CURRENCY_ABBREV = {
+    "k": "K", "m": "M", "b": "B", "t": "T",
+    "thousand": "K", "million": "M", "billion": "B", "trillion": "T",
+}
+
+
+def extract_numeric(text: str) -> NumericFact | None:
+    """§4.3 item 1 — deterministic numeric extraction from fetched prose.
+
+    Earliest pattern in the text wins: currency ($8.9B → USD_B), percentage
+    (12% → percent), magnitude+noun (350 million users → million_users).
+    metric_label = up to three significant words immediately before the match;
+    returns None for prose with no numeric pattern.
+    """
+    candidates: list[tuple[int, str, re.Match[str]]] = []
+    for kind, pattern in (("currency", _CURRENCY_RE), ("percent", _PERCENT_RE), ("mega", _MEGA_RE)):
+        match = pattern.search(text)
+        if match is not None:
+            candidates.append((match.start(), kind, match))
+    if not candidates:
+        return None
+    _, kind, match = min(candidates, key=lambda item: item[0])
+    label = _label_before(text, match.start())
+    if kind == "currency":
+        raw, suffix = match.group(1), match.group(2)
+        value = float(raw.replace(",", "")) * _MAGNITUDE.get(suffix.lower() if suffix else "", 1.0)
+        if suffix:
+            unit = f"USD_{_CURRENCY_ABBREV[suffix.lower()]}"
+        else:
+            unit = "USD"
+        return NumericFact(value=value, unit=unit, metric_label=label)
+    if kind == "percent":
+        return NumericFact(value=float(match.group(1)), unit="percent", metric_label=label)
+    raw, magnitude, noun = match.group(1), match.group(2), match.group(3)
+    return NumericFact(
+        value=float(raw.replace(",", "")),
+        unit=f"{magnitude}_{noun.casefold()}",
+        metric_label=label,
+    )
+
+
+def _label_before(text: str, position: int) -> str | None:
+    tokens = significant_tokens(text[:position])
+    if not tokens:
+        return None
+    return " ".join(tokens[-3:])

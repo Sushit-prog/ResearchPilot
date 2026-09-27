@@ -6,13 +6,21 @@ from datetime import datetime, timezone
 from app.agent.executor import StepHandler, execute_plan
 from app.agent.planner import generate_plan, normalize_goal
 from app.agent.state import AgentState, AgentStatus
-from app.agent.verifier import Sufficiency, evidence_sufficiency
+from app.agent.verifier import (
+    Sufficiency,
+    deduplicate_evidence,
+    evidence_sufficiency,
+    filter_evidence,
+    numeric_pass,
+)
 from app.config import Config
 from app.errors import PlannerError, PlanValidationError
 from app.llm.base import LLMProvider
 from app.models.events import EventKind
 from app.models.plan import PlanStep, StepStatus
 from app.observability import ConsoleEventSink, EventEmitter, InMemoryEventSink
+from app.reliability.runner import Runner
+from app.reliability.validation import normalize_url
 from app.tools.base import ToolRegistry
 
 
@@ -95,6 +103,38 @@ class Orchestrator:
                 key = f"{result.step_id}:{result.tool}:{result.call_ordinal}"
                 retries = max(result.attempts - 1, 0)
                 state.retry_counts[key] = max(state.retry_counts.get(key, 0), retries)
+
+        # Stage 8 + 9 (§4.10/§4.11): dedup → filter/validate → numeric pass
+        # run before sufficiency, so thresholds count only evidence that
+        # survived validation.
+        source_keys: set[str] = set()
+        for source in state.sources:
+            try:
+                source_keys.add(normalize_url(source.url))
+            except ValueError:
+                continue
+        deduped = deduplicate_evidence(state.evidence, emitter=emitter)
+        filtered, reject_warnings = filter_evidence(
+            deduped, emitter=emitter, source_keys=source_keys
+        )
+        state.warnings.extend(reject_warnings)
+        if "calculator" in self._registry.names():
+            verifier_runner = Runner(self.config, emitter, clock=self._clock)
+            evidence, conflict_warnings, verification_results = await numeric_pass(
+                filtered,
+                runner=verifier_runner,
+                calculator=self._registry.get("calculator"),
+                emitter=emitter,
+            )
+            state.tool_results.extend(verification_results)
+            for result in verification_results:
+                key = f"{result.step_id}:{result.tool}:{result.call_ordinal}"
+                retries = max(result.attempts - 1, 0)
+                state.retry_counts[key] = max(state.retry_counts.get(key, 0), retries)
+            state.warnings.extend(conflict_warnings)
+        else:
+            evidence = filtered
+        state.evidence = evidence
 
         sufficiency = evidence_sufficiency(
             state.evidence,
