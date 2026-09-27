@@ -5,6 +5,7 @@ import pytest
 from app.errors import (
     ConfigurationError,
     EvidenceValidationError,
+    LLMProviderError,
     MalformedToolOutputError,
     PermanentToolError,
     PlannerError,
@@ -25,6 +26,7 @@ ALL_ERRORS = [
     PlanValidationError,
     PlannerError,
     EvidenceValidationError,
+    LLMProviderError,
     ConfigurationError,
     ToolNotFoundError,
 ]
@@ -40,6 +42,7 @@ ALL_ERRORS = [
         (PlanValidationError, FailureKind.VALIDATION_ERROR),
         (PlannerError, FailureKind.PLANNER_ERROR),
         (EvidenceValidationError, FailureKind.VALIDATION_ERROR),
+        (LLMProviderError, None),
         (ConfigurationError, None),
         (ToolNotFoundError, None),
     ],

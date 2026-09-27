@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from app.agent.verifier import validate_plan
 from app.config import Config
-from app.errors import PlannerError, PlanValidationError
+from app.errors import PlannerError, PlanValidationError, ResearchPilotError
 from app.llm.base import LLMProvider
 from app.models.events import EventKind
 from app.models.plan import Plan
@@ -86,7 +86,10 @@ async def generate_plan(
     system, user = build_plan_prompt(normalized_goal, registry.schemas())
     feedback = ""
     for attempt in range(1, config.max_plan_attempts + 1):
-        raw = await llm.complete(system=system, user=user + feedback)
+        try:
+            raw = await llm.complete(system=system, user=user + feedback)
+        except ResearchPilotError as exc:
+            raise PlannerError(f"planner LLM call failed: {exc}") from exc
         try:
             plan = parse_plan(raw, registry, config)
         except PlanValidationError as exc:

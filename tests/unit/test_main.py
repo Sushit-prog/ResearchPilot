@@ -6,6 +6,7 @@ import pytest
 from app.config import Config
 from app.errors import ConfigurationError
 from app.main import build_tool_registry
+from app.tools.armed import ArmedTool
 from app.tools.calculator import CalculatorTool
 from app.tools.failure_simulator import FailureSimulatorTool
 from app.tools.web_search import WebSearchTool
@@ -67,3 +68,22 @@ def test_injected_http_client_is_shared_and_not_closed() -> None:
     registry = build_tool_registry(config_with_key(), client=client)
     assert registry.names() == EXPECTED_TOOLS
     assert not client.is_closed
+
+
+def test_default_registry_has_no_armed_tools() -> None:
+    registry = build_tool_registry(config_with_key())
+    assert not isinstance(registry.get("web_search"), ArmedTool)
+    assert not isinstance(registry.get("webpage_fetch"), ArmedTool)
+
+
+def test_simulate_failure_wraps_both_network_tools_only() -> None:
+    registry = build_tool_registry(config_with_key(), simulate_failure="timeout")
+    assert isinstance(registry.get("web_search"), ArmedTool)
+    assert isinstance(registry.get("webpage_fetch"), ArmedTool)
+    assert isinstance(registry.get("calculator"), CalculatorTool)
+    assert isinstance(registry.get("failure_simulator"), FailureSimulatorTool)
+
+
+def test_simulate_failure_rejects_unknown_mode() -> None:
+    with pytest.raises(ConfigurationError, match="unsupported failure mode"):
+        build_tool_registry(config_with_key(), simulate_failure="explode")

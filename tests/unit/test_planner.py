@@ -101,6 +101,18 @@ async def test_max_plan_attempts_budget_respected(fake_llm, registry, event_log)
     assert len(events) == 2
 
 
+async def test_llm_provider_failure_wrapped_as_planner_error(
+    fake_llm, registry, event_log
+) -> None:
+    llm = fake_llm()
+    emitter, events = event_log
+    with pytest.raises(PlannerError) as exc_info:
+        await generate_plan(llm, registry, Config(), emitter, "goal")
+    assert type(exc_info.value) is PlannerError
+    assert "planner LLM call failed" in str(exc_info.value)
+    assert events == []
+
+
 async def test_unknown_tool_triggers_correction_then_success(
     fake_llm, registry, event_log, valid_plan_json
 ) -> None:

@@ -47,6 +47,10 @@ class SynthesisError(ResearchPilotError):
     failure_kind = FailureKind.VALIDATION_ERROR
 
 
+class LLMProviderError(ResearchPilotError):
+    failure_kind = None
+
+
 class ConfigurationError(ResearchPilotError):
     failure_kind = None
 
