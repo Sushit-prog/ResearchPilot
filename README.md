@@ -174,16 +174,16 @@ All settings are environment variables (defaults from `app/config.py`):
 ## Usage
 
 ```bash
-# 1. Normal run
-uv run research-agent --query "What are the latest stable versions of the httpx and tenacity Python packages, and what timeout/retry features do they provide?"
+# 1. Normal run — transcript A's exact command
+uv run research-agent --query "What are the latest stable versions of the httpx and tenacity Python packages, and what timeout/retry features do they provide?" --output "reports/a"
 
-# 2. Failure-recovery demo (induced timeout on the first network call)
-uv run research-agent --query "What are the main causes of HTTP 429 rate limit errors and standard client-side mitigation strategies?" --simulate-failure timeout
+# 2. Failure-recovery demo (induced timeout on the first network call) — transcript B's exact command
+uv run research-agent --query "What are the main causes of HTTP 429 rate limit errors and standard client-side mitigation strategies?" --output "reports/b" --simulate-failure timeout
 
-# 3. Full event stream, no memory read/write
-uv run research-agent --query "How popular is Python really?" --verbose --no-memory
+# 3. Full event stream — transcript C's exact command
+uv run research-agent --query "How popular is Python really?" --output "reports/c" --verbose
 
-# 4. Write reports elsewhere
+# 4. Write reports elsewhere (illustrative)
 uv run research-agent --query "..." --output reports/demo
 ```
 
