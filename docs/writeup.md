@@ -3,6 +3,9 @@
 One page, engineer's voice. Companion to [`architecture.md`](architecture.md)
 (components/contracts) and [`evaluation.md`](evaluation.md) (measured numbers).
 
+Implementation was done with an AI coding agent (OpenCode) working from my
+architecture and specs; I reviewed the design and output of each phase.
+
 ## Design decisions
 
 **Deterministic runtime around LLM decisions.** The rubric's real question is
@@ -75,7 +78,7 @@ keeps tool selection load-bearing rather than decorative.
 
 ## Evaluation (how tested)
 
-490 offline tests: unit (schemas, normalization, dedup, retry tables,
+494 offline tests: unit (schemas, normalization, dedup, retry tables,
 rendering, CLI, provider), integration (planner→executor→evidence→synthesis,
 failure→retry→recovery), explicit failure tests (timeout, malformed planner
 output, invalid tool output, HTTP failure, exhausted retries), plus a

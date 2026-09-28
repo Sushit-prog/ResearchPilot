@@ -37,7 +37,7 @@ uv run research-agent --query "What are the latest stable versions of the httpx 
   - Sources: 6 searched, 4 used, 2 rejected
   - Tool calls: 8 | Retries: 0
   - Failures: none
-[DONE] completed — 2 steps, 0 failures, 0 retries, 10.6s
+[DONE] completed — 2 steps, 0 failed steps, 0 retries, 10.6s
 ```
 
 Reading the trace: the plan is printed before any action (visible planning

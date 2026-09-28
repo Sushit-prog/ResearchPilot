@@ -209,7 +209,7 @@ full transcript incl. report: [`transcript-a-normal.md`](examples/sample_runs/tr
 [REPORT] reports\a\what-are-the-latest-stable-versions-of-the-httpx-and-tenacit.md — 4 findings from 4 evidence items
   - Sources: 6 searched, 4 used, 2 rejected
   - Tool calls: 8 | Retries: 0
-[DONE] completed — 2 steps, 0 failures, 0 retries, 10.6s
+[DONE] completed — 2 steps, 0 failed steps, 0 retries, 10.6s
 ```
 
 The plan appears **before any tool runs**, the two steps run concurrently,
@@ -228,14 +228,17 @@ Real capture — abridged; full transcript incl. timing analysis and report:
 [`transcript-b-failure-timeout.md`](examples/sample_runs/transcript-b-failure-timeout.md).
 
 ```text
-[1/1] doing Identify the primary reasons servers return HTTP 429 responses ...
+[1/1] doing Retrieve authoritative information on the primary causes of HTTP 429 ...
 [WARN] web_search failed (transient): operation exceeded 10.0s
 [RETRY] web_search attempt 2: operation exceeded 10.0s
 [RECOVERED] web_search succeeded on attempt 2
 [WARN] webpage_fetch failed (transient): operation exceeded 10.0s
 [RETRY] webpage_fetch attempt 2: operation exceeded 10.0s
 ...
-[DONE] completed — 1 steps, 0 failures, 3 retries, 48.6s
+  - Tool calls: 4 | Retries: 3
+  - Failures:
+    - step1 via webpage_fetch (transient): operation exceeded 10.0s — source marked unavailable, run continued
+[DONE] completed — 1 steps, 0 failed steps, 3 retries, 49.0s
 ```
 
 **Timing note (honesty about what is real):** the console has no per-line
@@ -247,9 +250,10 @@ not a fake log line: `ArmedTool` injects *slowness only* (sleeps
 followed by the untouched code path: classification as `transient` → backoff →
 retry → `[RECOVERED]`. Later `webpage_fetch` timeouts in the same run are not
 injected (the arm is already spent) — they hit the same real deadline on
-genuinely slow pages. Corroboration: 49.3 s wall time vs 11.6 s for the normal
-run, and the report's Execution Summary counts `Retries: 3` and
-`1 rejected` source. Only the slowness is induced; every handling step is real.
+genuinely slow pages. Corroboration: 49.4 s wall time vs 11.6 s for the normal
+run, and the report's Execution Summary counts `Retries: 3`, `1 rejected`
+source, and lists the exhausted fetch call under `Failures:`. Only the
+slowness is induced; every handling step is real.
 
 The other two modes exercise the same machinery with different injections:
 `invalid_response` (malformed tool output) and `temporary_error` (explicit
@@ -264,7 +268,7 @@ uv run ruff check .
 uv run pytest -q
 ```
 
-**490 passed, 1 deselected in ~3.3 s** (deselected = the live-API marker; the
+**494 passed, 1 deselected in ~3.6 s** (deselected = the live-API marker; the
 core suite performs **zero network calls** — `httpx.MockTransport` for HTTP,
 scripted `FakeLLM` for planning/synthesis, fixed clock for retry/backoff).
 
@@ -298,6 +302,9 @@ These numbers come from a deterministic stand-in LLM and mocked HTTP — they
 measure the *runtime* (planning contract, tools, recovery, gates), not a real
 model's quality. Real-model behavior is shown instead in the three live
 transcripts.
+
+The assignment's requirement-by-requirement status, each row with its
+evidence: [`docs/requirement-matrix.md`](docs/requirement-matrix.md).
 
 ---
 

@@ -78,7 +78,7 @@ uv run research-agent --query "How popular is Python really?" --output "reports/
   - Sources: 6 searched, 1 used, 5 rejected
   - Tool calls: 8 | Retries: 0
   - Failures: none
-[DONE] completed — 2 steps, 0 failures, 0 retries, 9.3s
+[DONE] completed — 2 steps, 0 failed steps, 0 retries, 9.3s
 ```
 
 Reading the trace: two independent steps run concurrently (the interleaved
