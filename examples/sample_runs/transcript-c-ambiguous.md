@@ -4,7 +4,9 @@ Real live run: Tavily search + `openai/gpt-oss-120b` on the Groq API, with
 `--verbose` so the full event stream is visible. Goal is the **fixed, per
 policy** `"How popular is Python really?"`. Fresh memory DB (no `[MEMORY]`
 line). Captured 2026-09-28. Exit code `0`; wall time 10.3 s (agent-reported
-duration 9.3 s).
+duration 9.3 s). Post-capture edit: the `[DONE]` line's "N failures" was
+changed to "N failed steps" to match a later CLI wording change; nothing
+else was modified (byte-verified against the raw capture).
 
 ## Goal-selection disclosure (process, not cherry-picking)
 

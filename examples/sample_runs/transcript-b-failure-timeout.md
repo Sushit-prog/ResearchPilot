@@ -9,6 +9,11 @@ tool call that the step survives (an exhausted candidate fetch) now appears
 under `Failures:` in the `[REPORT]` block and the report's Execution Summary —
 previously this run printed `Failures: none`. Exit code `0`; **total wall time
 49.4 s (measured)**, agent-reported duration 49.0 s — see the timing note below.
+Re-capture disclosure: three re-capture attempts were made this session — the
+first was discarded while seeking a first-run (empty-cache) capture, the
+second because its search-only plan never fetched a failing candidate and so
+could not demonstrate the behavior under test; this transcript is the third
+attempt, and no other runs were discarded.
 
 ## Command
 

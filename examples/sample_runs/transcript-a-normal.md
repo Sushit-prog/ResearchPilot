@@ -4,7 +4,9 @@ Real live run (not simulated): Tavily search + `openai/gpt-oss-120b` on the
 Groq API (`https://api.groq.com/openai/v1`, OpenAI-compatible provider).
 Local memory database was empty at start (fresh-clone state), so no `[MEMORY]`
 line appears. Captured 2026-09-28. Exit code `0`; total wall time 11.6 s
-(agent-reported duration 10.5 s).
+(agent-reported duration 10.5 s). Post-capture edit: the `[DONE]` line's
+"N failures" was changed to "N failed steps" to match a later CLI wording
+change; nothing else was modified (byte-verified against the raw capture).
 
 > Note on live results: this run queried the real web; sources, versions, and
 > findings reflect the web on the capture date. The test suite never performs
