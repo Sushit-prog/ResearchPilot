@@ -37,7 +37,7 @@ Source of truth for details: [`docs/architecture.md`](docs/architecture.md)
 [`docs/architecture.svg`](docs/architecture.svg)
 ([mermaid source](docs/architecture.mmd) — rendered inline below for GitHub):
 
-<img width="2236" height="7114" alt="mermaid-diagram" src="https://github.com/user-attachments/assets/9d388b98-f316-4d2b-a583-b4ace4c28bbe" />
+<img width="2991" height="7652" alt="mermaid-diagram (1)" src="https://github.com/user-attachments/assets/1d67a609-48d0-4b38-bd4a-51ceefe9753a" />
 
 ---
 
