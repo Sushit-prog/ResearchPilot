@@ -80,7 +80,7 @@ async def test_full_run_reaches_completed_with_report_file(
     assert f"[REPORT] {state.report_path} — 3 findings from 3 evidence items" in console
     assert "  - Sources: 2 searched, 2 used, 0 rejected" in console
     assert "  - Failures: none" in console
-    assert "[DONE] completed — 2 steps, 0 failures, 2 retries, 0.0s" in console
+    assert "[DONE] completed — 2 steps, 0 failed steps, 2 retries, 0.0s" in console
 
 
 async def test_citation_degradation_ships_report_with_warning(

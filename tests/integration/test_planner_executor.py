@@ -72,7 +72,7 @@ async def test_planner_to_executor_full_phase_run(
     assert "[1/2] doing search for X..." in console_output
     assert "[2/2] doing compute 2+2..." in console_output
     assert "[SYNTHESIS] composing report from 3 evidence items" in console_output
-    assert "[DONE] completed — 2 steps, 0 failures, 2 retries, 0.0s" in console_output
+    assert "[DONE] completed — 2 steps, 0 failed steps, 2 retries, 0.0s" in console_output
 
 
 async def test_planner_exhaustion_marks_state_failed(

@@ -109,7 +109,7 @@ class ConsoleEventSink:
             return (
                 f"[DONE] {event.data.get('status', event.status or '')} — "
                 f"{event.data.get('steps', 0)} steps, "
-                f"{event.data.get('failures', 0)} failures, "
+                f"{event.data.get('failures', 0)} failed steps, "
                 f"{event.data.get('retries', 0)} retries, "
                 f"{event.data.get('duration_s', 0.0):.1f}s"
             )

@@ -11,6 +11,7 @@ from app.agent.synthesizer import (
     build_execution_summary,
     build_synthesis_prompt,
     contradictions_from,
+    execution_summary_lines,
     parse_report,
     render_markdown,
     slugify_goal,
@@ -504,6 +505,125 @@ def test_execution_summary_failures_unclassified_and_kind_fallback() -> None:
     assert failure.failure_kind is FailureKind.PERMANENT
     assert failure.unclassified is True
     assert "IndexError" in failure.message
+
+
+def test_execution_summary_lists_exhausted_candidate_inside_successful_step() -> None:
+    state = make_state([make_evidence("ev-a", "claim", url="https://example.com/a")])
+    state.tool_results = [
+        ToolResult(
+            result_id="r1-webpage_fetch-2",
+            tool="webpage_fetch",
+            step_id="r1",
+            call_ordinal=2,
+            success=True,
+            attempts=1,
+            started_at=FIXED_TIME,
+        ),
+        ToolResult(
+            result_id="r1-webpage_fetch-3",
+            tool="webpage_fetch",
+            step_id="r1",
+            call_ordinal=3,
+            success=False,
+            attempts=3,
+            failure_kind=FailureKind.TRANSIENT,
+            error="operation exceeded 10.0s",
+            started_at=FIXED_TIME,
+        ),
+    ]
+    summary = build_execution_summary(state, started_at=FIXED_TIME, finished_at=FIXED_TIME)
+    assert summary.steps_failed == 0
+    assert len(summary.failures) == 1
+    failure = summary.failures[0]
+    assert failure.step_id == "r1"
+    assert failure.tool == "webpage_fetch"
+    assert failure.failure_kind is FailureKind.TRANSIENT
+    assert failure.unclassified is False
+    assert "operation exceeded 10.0s" in failure.message
+    assert failure.message.endswith("— source marked unavailable, run continued")
+    rendered = "\n".join(execution_summary_lines(summary))
+    assert "  - r1 via webpage_fetch (transient): operation exceeded 10.0s" in rendered
+    assert rendered.count("  - ") == 1
+
+
+def test_execution_summary_ignores_failed_then_recovered_calls() -> None:
+    state = make_state([make_evidence("ev-a", "claim", url="https://example.com/a")])
+    state.tool_results = [
+        ToolResult(
+            result_id="r1-web_search-1",
+            tool="web_search",
+            step_id="r1",
+            call_ordinal=1,
+            success=True,
+            attempts=2,
+            started_at=FIXED_TIME,
+        )
+    ]
+    state.retry_counts = {"r1:web_search:1": 1}
+    summary = build_execution_summary(state, started_at=FIXED_TIME, finished_at=FIXED_TIME)
+    assert summary.failures == []
+    assert summary.retries == 1
+    assert summary.steps_failed == 0
+    assert "- Failures: none" in execution_summary_lines(summary)
+
+
+def test_execution_summary_failed_step_result_not_double_listed() -> None:
+    state = make_state([make_evidence("ev-a", "claim", url="https://example.com/a")])
+    state.failed_steps = [
+        StepRecord(
+            step_id="q1",
+            objective="compute",
+            tool="calculator",
+            status=StepStatus.FAILED,
+            result_ids=["q1-calculator-1"],
+            error="division by zero",
+            failure_kind=FailureKind.TRANSIENT,
+        )
+    ]
+    state.completed_steps = []
+    state.tool_results = [
+        ToolResult(
+            result_id="q1-calculator-1",
+            tool="calculator",
+            step_id="q1",
+            call_ordinal=1,
+            success=False,
+            attempts=3,
+            failure_kind=FailureKind.TRANSIENT,
+            error="division by zero",
+            started_at=FIXED_TIME,
+        )
+    ]
+    summary = build_execution_summary(state, started_at=FIXED_TIME, finished_at=FIXED_TIME)
+    assert summary.steps_failed == 1
+    assert len(summary.failures) == 1
+    assert summary.failures[0].step_id == "q1"
+
+
+def test_execution_summary_non_fetch_failure_gets_run_continued_suffix() -> None:
+    state = make_state([make_evidence("ev-a", "claim", url="https://example.com/a")])
+    state.failed_steps = []
+    state.tool_results = [
+        ToolResult(
+            result_id="ev-a:1:calculator-1",
+            tool="calculator",
+            step_id="ev-a:1",
+            call_ordinal=1,
+            success=False,
+            attempts=1,
+            failure_kind=FailureKind.VALIDATION_ERROR,
+            error="division by zero",
+            started_at=FIXED_TIME,
+        )
+    ]
+    summary = build_execution_summary(state, started_at=FIXED_TIME, finished_at=FIXED_TIME)
+    assert summary.steps_failed == 0
+    assert len(summary.failures) == 1
+    failure = summary.failures[0]
+    assert failure.tool == "calculator"
+    assert failure.message.endswith("— run continued")
+    assert "source marked unavailable" not in failure.message
+    assert "division by zero" in failure.message
 
 
 def test_slugify_is_path_traversal_safe() -> None:

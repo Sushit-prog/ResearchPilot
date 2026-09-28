@@ -134,6 +134,14 @@ def contradictions_from(evidence: list[Evidence]) -> list[str]:
 def build_execution_summary(
     state: AgentState, *, started_at: datetime, finished_at: datetime
 ) -> ExecutionSummary:
+    """Aggregate run counters and assemble every failure the run produced.
+
+    A failure is listed if it failed a step (one record per failed step) or if
+    it was a failed tool call whose step nevertheless succeeded (candidate
+    exhaustion inside a research step — the run continued). Calls that failed
+    and then recovered on retry are not listed: their retries are already
+    counted in ``retries``.
+    """
     searched: set[str] = set()
     for source in state.sources:
         try:
@@ -161,6 +169,25 @@ def build_execution_summary(
                 failure_kind=step.failure_kind or FailureKind.PERMANENT,
                 message=step.error or "",
                 unclassified=unclassified,
+            )
+        )
+    covered = {
+        result_id for step in state.failed_steps for result_id in step.result_ids
+    }
+    for result in state.tool_results:
+        if result.success or result.result_id in covered:
+            continue
+        if result.tool == "webpage_fetch":
+            suffix = " — source marked unavailable, run continued"
+        else:
+            suffix = " — run continued"
+        failures.append(
+            FailureRecord(
+                step_id=result.step_id,
+                tool=result.tool,
+                failure_kind=result.failure_kind or FailureKind.PERMANENT,
+                message=f"{result.error or 'tool call failed'}{suffix}",
+                unclassified=result.unclassified,
             )
         )
     return ExecutionSummary(

@@ -169,5 +169,5 @@ def test_renders_run_completed(fixed_clock) -> None:
         },
     )
     assert buffer.getvalue().strip() == (
-        "[DONE] completed — 2 steps, 1 failures, 2 retries, 0.4s"
+        "[DONE] completed — 2 steps, 1 failed steps, 2 retries, 0.4s"
     )
