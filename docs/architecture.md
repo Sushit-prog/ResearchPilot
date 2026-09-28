@@ -72,7 +72,6 @@ xiarch/                          # repo root = project root (see deviation D1)
 │   └── evaluation.md            # measured harness results (Phase 8)
 ├── README.md
 ├── pyproject.toml               # [project.scripts] research-agent = "app.main:main"
-├── .env.example
 ├── .gitignore
 └── LICENSE
 ```
@@ -455,9 +454,10 @@ class SearchOutput(BaseModel):
 
 Provider (chosen in Phase 3): **Tavily** — free tier, 1,000 searches/month
 (§3 budget), authenticated with `Authorization: Bearer <TAVILY_API_KEY>` via
-`TAVILY_API_KEY` in `.env.example`; swappable behind this interface.
-`published_at` stays `None` unless the provider returns `published_date`
-(only for `topic="news"` queries) — absent metadata is never fabricated.
+`TAVILY_API_KEY` from the environment (README Configuration); swappable behind
+this interface. `published_at` stays `None` unless the provider returns
+`published_date` (only for `topic="news"` queries) — absent metadata is never
+fabricated.
 
 **2. `webpage_fetch`**
 
@@ -964,8 +964,8 @@ API key (env only), search provider + key (Phase 3), `max_plan_attempts=3`,
 `retry.max_attempts=3` / backoff params, `default_timeout_s` per tool,
 `candidate_cap k=3`, evidence-sufficiency thresholds (`min_evidence=3`,
 `min_distinct_sources=2`), `max_steps=12`, report output dir, memory path,
-verbose/memory flags. `.env.example` documents every variable; no secret ever
-enters git, events, or logs (§26).
+verbose/memory flags. The README Configuration table documents every
+variable; no secret ever enters git, events, or logs (§26).
 
 **Python floor:** `requires-python = ">=3.11"` — explicit, not incidental: the
 only 3.11+ construct is stdlib `typing.Self` (`plan.py`), kept over a

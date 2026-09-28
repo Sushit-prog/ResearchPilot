@@ -125,11 +125,11 @@ Prerequisites: Python ≥ 3.11 and [uv](https://docs.astral.sh/uv/).
 git clone https://github.com/Sushit-prog/ResearchPilot.git
 cd ResearchPilot
 uv sync
-cp .env.example .env      # then fill in keys
 ```
 
 The app reads **OS environment variables only** (`.env` is not auto-loaded).
-Export it before running:
+Create a `.env` file with your keys — every supported variable is listed in
+[Configuration](#configuration) — then export it before running:
 
 ```bash
 # bash / zsh

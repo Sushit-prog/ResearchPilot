@@ -33,7 +33,7 @@ of inventing numbers (§15).
 ## Command
 
 ```powershell
-# same environment as transcript A (TAVILY_API_KEY + Groq — see .env.example)
+# same environment as transcript A (TAVILY_API_KEY + Groq — see README Configuration)
 uv run research-agent --query "How popular is Python really?" --output "reports/c" --verbose
 ```
 

@@ -18,7 +18,7 @@ attempt, and no other runs were discarded.
 ## Command
 
 ```powershell
-# same environment as transcript A (TAVILY_API_KEY + Groq — see .env.example)
+# same environment as transcript A (TAVILY_API_KEY + Groq — see README Configuration)
 uv run research-agent --query "What are the main causes of HTTP 429 rate limit errors and standard client-side mitigation strategies?" --output "reports/b" --simulate-failure timeout
 ```
 

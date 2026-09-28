@@ -15,7 +15,7 @@ change; nothing else was modified (byte-verified against the raw capture).
 ## Command
 
 ```powershell
-# Environment loaded from .env (TAVILY_API_KEY + Groq key — see .env.example)
+# Environment loaded from .env (TAVILY_API_KEY + Groq key — see README Configuration)
 $env:RESEARCHPILOT_LLM_PROVIDER = 'openai_compatible'
 $env:RESEARCHPILOT_LLM_BASE_URL = 'https://api.groq.com/openai/v1'
 $env:RESEARCHPILOT_LLM_MODEL     = 'openai/gpt-oss-120b'
