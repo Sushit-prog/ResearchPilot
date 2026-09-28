@@ -201,15 +201,15 @@ full transcript incl. report: [`transcript-a-normal.md`](examples/sample_runs/tr
 ```text
 [GOAL] What are the latest stable versions of the httpx and tenacity Python packages, ...
 [PLAN] 2 steps:
-  1. step1 [web_search] Find the current stable version of the httpx package and its timeout/retry features.
-  2. step2 [web_search] Find the current stable version of the tenacity package and its retry/timeout features.
-[1/2] doing Find the current stable version of the httpx package and its timeout/retry features....
-[2/2] doing Find the current stable version of the tenacity package and its retry/timeout features....
+  1. search_httpx [web_search] Identify the latest stable version of the httpx package and summarize its timeout capabilities.
+  2. search_tenacity [web_search] Identify the latest stable version of the tenacity package and summarize its retry capabilities.
+[1/2] doing Identify the latest stable version of the httpx package and summarize its timeout capabilities....
+[2/2] doing Identify the latest stable version of the tenacity package and summarize its retry capabilities....
 [SYNTHESIS] composing report from 4 evidence items
 [REPORT] reports\a\what-are-the-latest-stable-versions-of-the-httpx-and-tenacit.md — 4 findings from 4 evidence items
   - Sources: 6 searched, 4 used, 2 rejected
   - Tool calls: 8 | Retries: 0
-[DONE] completed — 2 steps, 0 failed steps, 0 retries, 10.6s
+[DONE] completed — 2 steps, 0 failed steps, 0 retries, 11.5s
 ```
 
 The plan appears **before any tool runs**, the two steps run concurrently,
@@ -228,17 +228,14 @@ Real capture — abridged; full transcript incl. timing analysis and report:
 [`transcript-b-failure-timeout.md`](examples/sample_runs/transcript-b-failure-timeout.md).
 
 ```text
-[1/1] doing Retrieve authoritative information on the primary causes of HTTP 429 ...
+[1/1] doing Find authoritative sources that explain the primary causes of HTTP 429 rate-limit errors ...
 [WARN] web_search failed (transient): operation exceeded 10.0s
 [RETRY] web_search attempt 2: operation exceeded 10.0s
 [RECOVERED] web_search succeeded on attempt 2
-[WARN] webpage_fetch failed (transient): operation exceeded 10.0s
-[RETRY] webpage_fetch attempt 2: operation exceeded 10.0s
-...
-  - Tool calls: 4 | Retries: 3
-  - Failures:
-    - step1 via webpage_fetch (transient): operation exceeded 10.0s — source marked unavailable, run continued
-[DONE] completed — 1 steps, 0 failed steps, 3 retries, 49.0s
+[SYNTHESIS] composing report from 2 evidence items
+  - Tool calls: 4 | Retries: 1
+  - Failures: none
+[DONE] completed — 1 steps, 0 failed steps, 1 retries, 17.2s
 ```
 
 **Timing note (honesty about what is real):** the console has no per-line
@@ -248,12 +245,13 @@ not a fake log line: `ArmedTool` injects *slowness only* (sleeps
 `timeout + 1 s` on the run's first network call — a one-shot arm), while the
 **wait itself is the runner's own `asyncio.wait_for` deadline (10 s) firing**,
 followed by the untouched code path: classification as `transient` → backoff →
-retry → `[RECOVERED]`. Later `webpage_fetch` timeouts in the same run are not
-injected (the arm is already spent) — they hit the same real deadline on
-genuinely slow pages. Corroboration: 49.4 s wall time vs 11.6 s for the normal
-run, and the report's Execution Summary counts `Retries: 3`, `1 rejected`
-source, and lists the exhausted fetch call under `Failures:`. Only the
-slowness is induced; every handling step is real.
+retry → `[RECOVERED]`. In this capture the arm was spent on the search call
+and every later fetch succeeded first try, so `Failures: none` is accurate —
+a candidate fetch that instead exhausts its retries lands under `Failures:`
+with `source marked unavailable, run continued` (the execution-summary fix).
+Corroboration: 18.2 s wall time vs 12.1 s for the normal run, and the
+report's Execution Summary counts `Retries: 1`. Only the slowness is induced;
+every handling step is real.
 
 The other two modes exercise the same machinery with different injections:
 `invalid_response` (malformed tool output) and `temporary_error` (explicit
@@ -268,7 +266,7 @@ uv run ruff check .
 uv run pytest -q
 ```
 
-**494 passed, 1 deselected in ~3.6 s** (deselected = the live-API marker; the
+**504 passed, 1 deselected in ~3.9 s** (deselected = the live-API marker; the
 core suite performs **zero network calls** — `httpx.MockTransport` for HTTP,
 scripted `FakeLLM` for planning/synthesis, fixed clock for retry/backoff).
 
@@ -382,9 +380,19 @@ Additional honest limitations:
   error and `exit 1`; bounded retry exists for *tools*, not for LLM calls
   (this actually occurred during transcript capture — see
   [`docs/writeup.md`](docs/writeup.md)).
+- **Citation gate covers Key Findings only.** The executive summary and
+  actionable insights are LLM-written *from* the evidence and can include
+  general knowledge; only Key Findings are checked sentence-by-sentence
+  against evidence URLs before the report ships.
 - **Thin evidence happens.** JS-walled or irrelevant pages get rejected; the
-  report then flags insufficiency rather than padding — see transcript C
-  (1 evidence item from 6 searched sources).
+  report then states only what the surviving evidence supports — transcript C
+  rejected 5 of 9 sources (`no relevant passage` ×3, JS-walled ×2) and cites
+  only what the remaining 4 evidence items carry.
+- **Flattened text, no DOM structure.** Sentence selection sees whitespace
+  only: on promo/JS-heavy pages a selected passage can open with site-chrome
+  text glued to the first period (visible in transcript C's evidence
+  excerpts). Run-on, length, and title-case guards remove most of it, but
+  DOM-aware extraction would remove the rest.
 - **Conflict detection is numeric-only** (same metric label, different
   values); qualitative contradictions rely on the synthesizer noticing them.
 - **One search provider** (Tavily) behind the interface; quality of findings

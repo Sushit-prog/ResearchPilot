@@ -78,7 +78,7 @@ keeps tool selection load-bearing rather than decorative.
 
 ## Evaluation (how tested)
 
-494 offline tests: unit (schemas, normalization, dedup, retry tables,
+504 offline tests: unit (schemas, normalization, dedup, retry tables,
 rendering, CLI, provider), integration (planner→executor→evidence→synthesis,
 failure→retry→recovery), explicit failure tests (timeout, malformed planner
 output, invalid tool output, HTTP failure, exhausted retries), plus a

@@ -2,7 +2,7 @@
 
 Assignment requirement-by-requirement status, filled at Phase 10 (final audit)
 of `AGENTS.md` §28/§29. `AGENTS.md` itself is left untouched; this document
-carries the evidence. Verified 2026-09-28: full suite `494 passed, 1
+carries the evidence. Verified 2026-09-28: full suite `504 passed, 1
 deselected`, ruff clean, all three transcripts re-captured on the same build.
 
 | Requirement | Implemented | Evidence |
@@ -11,11 +11,11 @@ deselected`, ruff clean, all three transcripts re-captured on the same build.
 | Autonomous planning | Yes | `generate_plan` (`app/agent/planner.py:85`) → `parse_plan` + validation (`planner.py:75`) rejects unknown tools and placeholder arguments (`NO_PLACEHOLDER_RULE`, `planner.py:32`) with bounded correction; measured plan validity 5/6 first pass, 6/6 after correction (`docs/evaluation.md`) |
 | 2+ tools | Yes¹ | Four registered: `web_search`, `webpage_fetch`, `calculator`, `failure_simulator` (`app/main.py:58-61`); live transcripts use `web_search` + `webpage_fetch` |
 | Visible plan | Yes | `[PLAN] N steps:` printed **before** any tool call (`app/observability.py:119-124`, emitted pre-execution), `[n/N] doing …` progress (`app/agent/orchestrator.py:89`); transcripts A/B/C |
-| Tool execution | Yes | Per-step calls run through the reliability runner; one `ToolResult` per call (`app/models/events.py:24-37`); `Tool calls:` counts in every report's Execution Summary (A: 8, B: 4, C: 8) |
+| Tool execution | Yes | Per-step calls run through the reliability runner; one `ToolResult` per call (`app/models/events.py:24-37`); `Tool calls:` counts in every report's Execution Summary (A: 8, B: 4, C: 12) |
 | Failure simulation | Yes² | `--simulate-failure {timeout,invalid_response,temporary_error}` (`app/main.py:85-90`) arms a one-shot `ArmedTool` (`app/tools/armed.py:29`, modes `armed.py:9`) wrapping both network tools (`main.py:53-56`); live demo: transcript B (`timeout`) |
-| Recovery | Yes | Bounded retry + backoff with visible `[WARN]/[RETRY]/[RECOVERED]`, exhausted candidate → source marked unavailable → run continues, failure surfaced in the report's `Failures:` record; transcript B ends exit 0 with a full report; tests `tests/failure/`, `tests/unit/test_armed.py`; harness recovery 1/1 (`docs/evaluation.md`) |
+| Recovery | Yes | Bounded retry + backoff with visible `[WARN]/[RETRY]/[RECOVERED]`, exhausted candidate → source marked unavailable → run continues, retries/failures surfaced in the Execution Summary; transcript B ends exit 0 with a full report; tests `tests/failure/`, `tests/unit/test_armed.py`; harness recovery 1/1 (`docs/evaluation.md`) |
 | Structured output | Yes | Typed Pydantic models end to end; Markdown report with the required sections (`render_markdown`, `app/agent/synthesizer.py:364`) incl. citation gate; report blocks inside all three transcripts |
-| Tests | Yes | `uv run pytest -q` → **494 passed, 1 deselected** (live-API marker); `uv run ruff check .` → clean; unit / integration / failure / evaluation suites, all offline (MockTransport + scripted FakeLLM) |
+| Tests | Yes | `uv run pytest -q` → **504 passed, 1 deselected** (live-API marker); `uv run ruff check .` → clean; unit / integration / failure / evaluation suites, all offline (MockTransport + scripted FakeLLM) |
 | Architecture diagram | Yes | `docs/architecture.svg` (exported from `docs/architecture.mmd`), linked from the README's Architecture section |
 | Sample transcripts | Yes | Three real captures: `examples/sample_runs/transcript-a-normal.md`, `transcript-b-failure-timeout.md`, `transcript-c-ambiguous.md` |
 | README | Yes | `README.md` — setup, configuration, three example commands, real example run, failure-recovery demo, testing, evaluation, design decisions, limitations |

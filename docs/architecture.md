@@ -757,14 +757,22 @@ detect → tool_failed event → retry counter++ → bounded backoff   [RETRY]
 Realized inside the research unit for research steps (the §4 diagram's
 "Evidence Collector" is a logical stage, not a separate dispatch pass):
 
-- Successful `webpage_fetch` output → bounded excerpt → `claim` phrased from
-  the excerpt + `extracted_text` + provenance (`source_url`, `source_title`,
-  `step_id`, `retrieved_at`) + seed `relevance_score` → `evidence_added` event.
-- Numeric extraction (§4.3 item 1) runs as part of this pass.
+- Successful `webpage_fetch` output → sentence candidates from the bounded
+  text, structurally filtered (terminated with `.`/`!`/`?`, ≥6 alpha words,
+  mostly alphabetic, balanced parens, no run-ons, not title-case-dominated)
+  and scored by `term_overlap` against the step's terms — only score > 0 is
+  eligible, top 3 joined in original order up to 500 chars → `claim` =
+  `extracted_text` = that passage, + provenance (`source_url`,
+  `source_title`, `step_id`, `retrieved_at`) + seed `relevance_score` →
+  `evidence_added` event.
+- Numeric extraction (§4.3 item 1) runs on the selected passages only, as
+  part of this pass.
 - Goal-URL fetch steps and calculator outputs convert the same way (calculator
   → evidence with `source_url = None`, marked derived).
-- Nothing without a source and an excerpt becomes evidence — invalid/empty
-  candidates are rejected with `evidence_rejected` here, before filtering.
+- Nothing without a source and a qualifying passage becomes evidence — empty
+  pages (`no extractable text in fetched page`) and pages where no sentence
+  both passes the structural filter and scores > 0 (`no relevant passage`)
+  are rejected with `evidence_rejected` here, before filtering.
 
 ### 4.10 Stage 8 — Deduplication (deterministic, §10)
 

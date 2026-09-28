@@ -3,10 +3,9 @@
 Real live run (not simulated): Tavily search + `openai/gpt-oss-120b` on the
 Groq API (`https://api.groq.com/openai/v1`, OpenAI-compatible provider).
 Local memory database was empty at start (fresh-clone state), so no `[MEMORY]`
-line appears. Captured 2026-09-28. Exit code `0`; total wall time 11.6 s
-(agent-reported duration 10.5 s). Post-capture edit: the `[DONE]` line's
-"N failures" was changed to "N failed steps" to match a later CLI wording
-change; nothing else was modified (byte-verified against the raw capture).
+line appears. Re-captured 2026-09-28 after the passage-extraction change
+(claims are selected query-relevant passages, not first sentences). Exit code
+`0`; total wall time 12.1 s (agent-reported duration 11.5 s).
 
 > Note on live results: this run queried the real web; sources, versions, and
 > findings reflect the web on the capture date. The test suite never performs
@@ -28,18 +27,18 @@ uv run research-agent --query "What are the latest stable versions of the httpx 
 ```text
 [GOAL] What are the latest stable versions of the httpx and tenacity Python packages, and what timeout/retry features do they provide?
 [PLAN] 2 steps:
-  1. step1 [web_search] Find the current stable version of the httpx package and its timeout/retry features.
-  2. step2 [web_search] Find the current stable version of the tenacity package and its retry/timeout features.
-[1/2] doing Find the current stable version of the httpx package and its timeout/retry features....
-[2/2] doing Find the current stable version of the tenacity package and its retry/timeout features....
+  1. search_httpx [web_search] Identify the latest stable version of the httpx package and summarize its timeout capabilities.
+  2. search_tenacity [web_search] Identify the latest stable version of the tenacity package and summarize its retry capabilities.
+[1/2] doing Identify the latest stable version of the httpx package and summarize its timeout capabilities....
+[2/2] doing Identify the latest stable version of the tenacity package and summarize its retry capabilities....
 [SYNTHESIS] composing report from 4 evidence items
 [REPORT] reports\a\what-are-the-latest-stable-versions-of-the-httpx-and-tenacit.md — 4 findings from 4 evidence items
-  - Duration: 10.5s
+  - Duration: 11.5s
   - Steps: 2 total, 2 succeeded, 0 failed
   - Sources: 6 searched, 4 used, 2 rejected
   - Tool calls: 8 | Retries: 0
   - Failures: none
-[DONE] completed — 2 steps, 0 failed steps, 0 retries, 10.6s
+[DONE] completed — 2 steps, 0 failed steps, 0 retries, 11.5s
 ```
 
 Reading the trace: the plan is printed before any action (visible planning
@@ -59,40 +58,41 @@ Synthesis consumed 4 evidence items from 4 distinct sources.
 What are the latest stable versions of the httpx and tenacity Python packages, and what timeout/retry features do they provide?
 
 ## Executive Summary
-The available evidence mentions the httpx-retries package version 0.6.0, references the HTTPX documentation, and points to Tenacity's stable API reference and retry logic documentation. However, the evidence does not explicitly state the latest stable version numbers for the core httpx or tenacity packages themselves. The documentation sources do confirm that both libraries support timeout and retry capabilities, but detailed feature lists are not provided in the extracted claims.
+The available evidence describes the timeout configuration options of httpx and the retry capabilities of Tenacity, but does not include the current stable version numbers for either package.
 
 ## Key Findings
-1. The httpx-retries package is at version 0.6.0.
-   Source: httpx-retries 0.6.0 on PyPI - Libraries.io - security & maintenance data for open source software — https://libraries.io/pypi/httpx-retries (confidence 0.70)
-2. The HTTPX documentation (official site) describes the library as fully type‑annotated and includes features such as timeout handling and retry support.
-   Source: HTTPX — https://www.python-httpx.org (confidence 0.70)
-3. Tenacity’s stable API reference documents its retry mechanisms, including synchronous and asynchronous retrying classes.
-   Source: API Reference — Tenacity documentation — https://tenacity.readthedocs.io/en/stable/api.html (confidence 0.70)
-4. Tenacity provides retry logic utilities, as highlighted in tutorial‑style material on retrying with Tenacity.
-   Source: Retry Logic with Tenacity - Instructor — https://python.useinstructor.com/concepts/retrying/ (confidence 0.70)
+1. httpx allows configuring request timeouts via the `timeout` parameter; a default of 10 seconds can be set, and `None` disables timeouts. More granular timeout settings are also supported.
+   Source: Timeouts - HTTPX — https://www.python-httpx.org/advanced/timeouts/ (confidence 0.70)
+2. Tenacity provides a flexible retrying framework, including features such as `retry_if_exception_cause_type` and support for asynchronous retrying via `AsyncRetrying`.
+   Source: Changelog — Tenacity documentation — https://tenacity.readthedocs.io/en/stable/changelog.html (confidence 0.70)
+3. Tenacity is described as a general‑purpose retry library that simplifies adding retry behavior to functions and methods.
+   Source: Enhancing Python Applications with Tenacity: A Guide to Robust Retry Mechanisms | Leapcell — https://leapcell.io/blog/enhancing-python-applications-with-tenacity (confidence 0.70)
+4. The provided evidence does not contain information about the latest stable version numbers of httpx or tenacity.
+   Source: Python Package Index - Products, Competitors, Financials, Employees, Headquarters Locations — https://www.cbinsights.com/company/python-package-index (confidence 0.70)
 
 ## Important Evidence
-- [step1:2] Big news! Sonar has entered a definitive agreement to acquire Tidelift! Toggle navigation Login GitHub GitLab Bitbucket By logging in you accept our terms of service and privacy policy httpx-retries Release 0.6.0 Release 0.6.0 Toggle Dropd…
-- [step1:4] Skip to content HTTPX Introduction Initializing search encode/httpx HTTPX encode/httpx Introduction Introduction Table of contents Features Documentation Dependencies Installation QuickStart Advanced Advanced Clients Authentication SSL Pro…
-- [step2:2] Skip to content 🎉 Introducing Kura: Turn your chat logs into actionable insights! Discover user patterns, extract intents, and understand conversation flows at scale. Try it on GitHub → Instructor Retry Logic with Tenacity Initializing sea…
-- [step2:4] Tenacity stable Changelog API Reference Retry Main API Retrying AsyncRetrying AsyncRetrying.wraps() TornadoRetrying After Functions after_log() after_nothing() Before Functions before_log() before_nothing() Before Sleep Functions before_sl…
+- [search_httpx:4] client = httpx.Client(timeout=10.0) # Use a default 10s timeout everywhere. client = httpx.Client(timeout=None) # Disable all timeouts by default. Fine tuning the configuration HTTPX also allows you to specify the timeout behavior in more…
+- [search_tenacity:3] AsyncRetrying was erroneously implementing __iter__(), making tenacity retrying mechanism working but in a synchronous fashion and not waiting as expected. 8.1.0¶ New Features¶ Add a new retry_base class called retry_if_exception_cause_typ…
+- [search_tenacity:4] Python's Tenacity library offers a powerful and flexible solution for adding such retry mechanisms with minimal effort. Tenacity is a general-purpose retrying library for Python, designed to simplify the process of adding retry behavior to…
+- [search_httpx:2] When a bad version of a legitimate package ships, an update bot does exactly what it was built to do: It opens a pull request and waits for a review. Python Package Index was founded in 2003. Python Package Index's headquarters is located…
 
 ## Contradictions / Uncertainty
 - None identified.
 
 ## Actionable Insights
-- Check the official PyPI pages for httpx (https://pypi.org/project/httpx/) and tenacity (https://pypi.org/project/tenacity/) to obtain the exact latest stable version numbers.
-- Review the HTTPX documentation for detailed timeout configuration options (e.g., the `timeout` parameter in client calls).
-- Consult Tenacity’s API reference to select appropriate retry strategies (e.g., `stop`, `wait`, `retry` policies) for your use case.
+- Consult the official PyPI pages for httpx (https://pypi.org/project/httpx/) and tenacity (https://pypi.org/project/tenacity/) to obtain the latest stable version numbers.
+- When using httpx, set a sensible default timeout (e.g., 10 seconds) via the `timeout` argument, or disable timeouts with `timeout=None` if appropriate. Use the fine‑grained timeout configuration for per‑operation control.
+- Leverage Tenacity's retry utilities such as `retry_if_exception_cause_type`, `stop_after_attempt`, and `wait_exponential` to implement robust retry logic. For asynchronous code, prefer `AsyncRetrying` after confirming the library version resolves the iterator issue.
+- Document the chosen timeout and retry policies in project guidelines to ensure consistent behavior across services.
 
 ## Sources
-1. httpx-retries 0.6.0 on PyPI - Libraries.io - security & maintenance data for open source software — https://libraries.io/pypi/httpx-retries (libraries.io)
-2. HTTPX — https://www.python-httpx.org (www.python-httpx.org)
-3. Retry Logic with Tenacity - Instructor — https://python.useinstructor.com/concepts/retrying/ (python.useinstructor.com)
-4. API Reference — Tenacity documentation — https://tenacity.readthedocs.io/en/stable/api.html (tenacity.readthedocs.io)
+1. Python Package Index - Products, Competitors, Financials, Employees, Headquarters Locations — https://www.cbinsights.com/company/python-package-index (www.cbinsights.com)
+2. Timeouts - HTTPX — https://www.python-httpx.org/advanced/timeouts/ (www.python-httpx.org)
+3. Changelog — Tenacity documentation — https://tenacity.readthedocs.io/en/stable/changelog.html (tenacity.readthedocs.io)
+4. Enhancing Python Applications with Tenacity: A Guide to Robust Retry Mechanisms | Leapcell — https://leapcell.io/blog/enhancing-python-applications-with-tenacity (leapcell.io)
 
 ## Execution Summary
-- Duration: 10.5s
+- Duration: 11.5s
 - Steps: 2 total, 2 succeeded, 0 failed
 - Sources: 6 searched, 4 used, 2 rejected
 - Tool calls: 8 | Retries: 0
