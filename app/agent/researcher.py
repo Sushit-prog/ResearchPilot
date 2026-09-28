@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime
 from urllib.parse import urlparse
 
@@ -40,8 +41,32 @@ _TIER_RANK = {
 
 _WEB_CONFIDENCE = 0.7
 _DERIVED_CONFIDENCE = 0.9
-_CLAIM_LIMIT = 240
 _EXCERPT_LIMIT = 500
+_MAX_PASSAGES = 3
+_MIN_PASSAGE_WORDS = 6
+_MIN_ALPHA_RATIO = 0.5
+_MAX_TITLECASE_RATIO = 0.5
+_MAX_CANDIDATE_CHARS = 400
+_RUN_ON_WORDS = 30
+
+_ABBREVIATIONS = (
+    "mr", "mrs", "ms", "dr", "prof", "sr", "jr", "inc", "ltd", "llc",
+    "co", "corp", "etc", "vs", "e.g", "i.e", "no", "fig", "approx",
+    "dept", "st", "ave", "blvd", "a.m", "p.m", "v",
+)
+_ABBREV_RE = re.compile(
+    r"(?i)(?<![\w.])(" + "|".join(re.escape(item) for item in _ABBREVIATIONS) + r")\.(?=\s|$)"
+)
+_ABBREV_MASK = "\x00"
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
+_SENTENCE_END = frozenset(".!?")
+
+
+@dataclass(frozen=True)
+class Rejection:
+    """Evidence-extraction rejection: reason string for evidence_rejected."""
+
+    reason: str
 
 
 class Researcher:
@@ -132,21 +157,21 @@ class Researcher:
                     query_terms=query_terms,
                     retrieved_at=fetch.started_at,
                 )
-                if found is not None:
+                if isinstance(found, Rejection):
+                    self._emitter.emit(
+                        EventKind.EVIDENCE_REJECTED,
+                        tool="webpage_fetch",
+                        step_id=step.id,
+                        message=found.reason,
+                        data={"url": fetched.final_url},
+                    )
+                else:
                     evidence.append(found)
                     self._emitter.emit(
                         EventKind.EVIDENCE_ADDED,
                         tool="webpage_fetch",
                         step_id=step.id,
                         data={"evidence_id": found.evidence_id, "url": found.source_url},
-                    )
-                else:
-                    self._emitter.emit(
-                        EventKind.EVIDENCE_REJECTED,
-                        tool="webpage_fetch",
-                        step_id=step.id,
-                        message="no extractable text in fetched page",
-                        data={"url": fetched.final_url},
                     )
             else:
                 sources.append(
@@ -213,21 +238,21 @@ class Researcher:
             retrieved_at=fetch.started_at,
         )
         evidence: list[Evidence] = []
-        if found is not None:
+        if isinstance(found, Rejection):
+            self._emitter.emit(
+                EventKind.EVIDENCE_REJECTED,
+                tool="webpage_fetch",
+                step_id=step.id,
+                message=found.reason,
+                data={"url": fetched.final_url},
+            )
+        else:
             evidence.append(found)
             self._emitter.emit(
                 EventKind.EVIDENCE_ADDED,
                 tool="webpage_fetch",
                 step_id=step.id,
                 data={"evidence_id": found.evidence_id, "url": found.source_url},
-            )
-        else:
-            self._emitter.emit(
-                EventKind.EVIDENCE_REJECTED,
-                tool="webpage_fetch",
-                step_id=step.id,
-                message="no extractable text in fetched page",
-                data={"url": fetched.final_url},
             )
         return StepOutcome(tool_results=[fetch], evidence=evidence, sources=sources)
 
@@ -317,16 +342,92 @@ def _rank(
     return [item for _, item in sorted(enumerate(unique), key=sort_key)]
 
 
-def _first_sentence(text: str, limit: int) -> str:
-    cut = -1
-    for marker in (". ", "! ", "? "):
-        index = text.find(marker)
-        if index != -1 and (cut == -1 or index < cut):
-            cut = index
-    sentence = text[: cut + 1].strip() if cut != -1 else text.strip()
-    if len(sentence) <= limit:
-        return sentence
-    return sentence[: limit - 3].rstrip() + "..."
+def _split_sentences(normalized: str) -> list[str]:
+    """Split whitespace-collapsed page text on [.!?] boundaries.
+
+    Known abbreviations (Mr., e.g., No. …) have their period masked before
+    the split so they cannot break a sentence in half; a sentence that fails
+    to terminate with punctuation is still returned (the candidate filter
+    drops it afterwards).
+    """
+    masked = _ABBREV_RE.sub(lambda match: match.group(0)[:-1] + _ABBREV_MASK, normalized)
+    parts = _SENTENCE_SPLIT_RE.split(masked)
+    return [
+        part.replace(_ABBREV_MASK, ".").strip()
+        for part in parts
+        if part.strip()
+    ]
+
+
+def _is_passage_candidate(sentence: str) -> bool:
+    """§4.9 structural filter — reject nav/boilerplate fragments.
+
+    A sentence must terminate with . ! or ?, carry at least six
+    alpha-containing words, stay mostly alphabetic, keep parentheses
+    balanced (a mid-sentence cut like "(draft." is not a sentence), avoid
+    run-ons (over `_MAX_CANDIDATE_CHARS` characters, or 30+ words without a
+    comma/semicolon — menu and TOC glue), and not be dominated by
+    title-case tokens after the first (menu lines like "Products Solutions
+    Pricing." fail that last check).
+    """
+    stripped = sentence.strip()
+    if not stripped or stripped[-1] not in _SENTENCE_END:
+        return False
+    if len(stripped) > _MAX_CANDIDATE_CHARS:
+        return False
+    if stripped.count("(") > stripped.count(")"):
+        return False
+    words = stripped.split()
+    alpha_words = [word for word in words if any(char.isalpha() for char in word)]
+    if len(alpha_words) < _MIN_PASSAGE_WORDS:
+        return False
+    if len(alpha_words) >= _RUN_ON_WORDS and not re.search(r"[,;]", stripped):
+        return False
+    non_space = [char for char in stripped if not char.isspace()]
+    if not non_space:
+        return False
+    if sum(1 for char in non_space if char.isalpha()) / len(non_space) < _MIN_ALPHA_RATIO:
+        return False
+    followers = [word for word in words[1:] if word[0].isalpha()]
+    if followers:
+        titlecase = sum(1 for word in followers if word[0].isupper()) / len(followers)
+        if titlecase > _MAX_TITLECASE_RATIO:
+            return False
+    return True
+
+
+def _select_passages(normalized: str, query_terms: frozenset[str]) -> str | None:
+    """Score structural candidates by query-term overlap and join the best.
+
+    Only sentences with overlap > 0 are eligible — never pad with
+    zero-score sentences; return None when nothing qualifies (the caller
+    rejects the page with "no relevant passage"). Ranking is
+    `(-score, position)`, ties break by original position; the top
+    `_MAX_PASSAGES` are joined in original order, capped at
+    `_EXCERPT_LIMIT` characters.
+    """
+    candidates = [
+        sentence
+        for sentence in _split_sentences(normalized)
+        if _is_passage_candidate(sentence)
+    ]
+    eligible = [
+        (term_overlap(query_terms, sentence), index, sentence)
+        for index, sentence in enumerate(candidates)
+    ]
+    eligible = [item for item in eligible if item[0] > 0]
+    if not eligible:
+        return None
+    ranked = sorted(eligible, key=lambda item: (-item[0], item[1]))
+    chosen: list[tuple[int, str]] = []
+    total = 0
+    for _, index, sentence in ranked[:_MAX_PASSAGES]:
+        cost = len(sentence) + (1 if chosen else 0)
+        if total + cost <= _EXCERPT_LIMIT:
+            chosen.append((index, sentence))
+            total += cost
+    chosen.sort(key=lambda item: item[0])
+    return " ".join(sentence for _, sentence in chosen)
 
 
 def _web_evidence(
@@ -338,21 +439,31 @@ def _web_evidence(
     text: str,
     query_terms: frozenset[str],
     retrieved_at: datetime,
-) -> Evidence | None:
+) -> Evidence | Rejection:
+    """Turn one fetched page into one evidence item, or reject it.
+
+    claim and extracted_text are the same query-relevant passage string
+    (never nav boilerplate: sentences are structurally filtered and scored
+    against the step's terms first). Numeric extraction runs on the
+    selected passages only; relevance stays page-level.
+    """
     normalized = " ".join(text.split())
     if not normalized:
-        return None
+        return Rejection("no extractable text in fetched page")
+    passages = _select_passages(normalized, query_terms)
+    if passages is None:
+        return Rejection("no relevant passage")
     return Evidence(
         evidence_id=evidence_id,
-        claim=_first_sentence(normalized, _CLAIM_LIMIT),
+        claim=passages,
         source_url=url,
         source_title=title,
-        extracted_text=normalized[:_EXCERPT_LIMIT],
+        extracted_text=passages,
         relevance_score=term_overlap(query_terms, normalized),
         confidence=_WEB_CONFIDENCE,
         retrieved_at=retrieved_at,
         step_id=step_id,
-        numeric=extract_numeric(normalized),
+        numeric=extract_numeric(passages),
     )
 
 

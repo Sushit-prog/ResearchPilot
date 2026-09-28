@@ -177,7 +177,9 @@ async def test_exhausted_retries_advance_to_next_ranked_candidate() -> None:
             return httpx.Response(500)
         if request.url.path == "/missing":
             return httpx.Response(404)
-        return html(page("Live", "The live candidate finally answered."))
+        return html(
+            page("Live", "The live candidate finally answered with orbital mechanics content.")
+        )
 
     events: list[Any] = []
     delays: list[float] = []
@@ -228,7 +230,10 @@ async def test_exhausted_retries_advance_to_next_ranked_candidate() -> None:
 
     assert len(outcome.evidence) == 1
     assert outcome.evidence[0].source_url == "https://example.org/live"
-    assert outcome.evidence[0].claim == "The live candidate finally answered."
+    assert (
+        outcome.evidence[0].claim
+        == "The live candidate finally answered with orbital mechanics content."
+    )
 
     assert kinds(events).count(EventKind.SOURCE_UNAVAILABLE) == 2
     assert kinds(events).count(EventKind.CANDIDATE_ADVANCED) == 2

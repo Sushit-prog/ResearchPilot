@@ -85,9 +85,9 @@ def make_handler(*, flaky_search: bool = False) -> Any:
                 },
             )
         if request.url.path == "/one":
-            return html(page("One", "Fact one about orbital mechanics."))
+            return html(page("One", "Fact one about orbital mechanics research."))
         if request.url.path == "/two":
-            return html(page("Two", "Fact two about orbital mechanics."))
+            return html(page("Two", "Fact two about orbital mechanics research."))
         return httpx.Response(404)
 
     return handler

@@ -5,12 +5,13 @@ from typing import Any
 
 import httpx
 
-from app.agent.researcher import Researcher
+from app.agent.researcher import Rejection, Researcher, _select_passages, _web_evidence
 from app.config import Config
 from app.models.events import EventKind, FailureKind
 from app.models.plan import PlanStep
 from app.observability import EventEmitter, InMemoryEventSink
 from app.reliability.runner import Runner
+from app.reliability.validation import term_set
 from app.tools.base import ToolRegistry
 from app.tools.calculator import CalculatorTool
 from app.tools.failure_simulator import FailureSimulatorTool
@@ -89,7 +90,7 @@ async def test_research_step_ranks_tiers_dedups_urls_and_extracts_evidence() -> 
                 headers={"content-type": "text/html; charset=utf-8"},
             )
         if request.url.host == "example.com":
-            return html(page("A", "Alpha beta content."))
+            return html(page("A", "Alpha beta content explains the orbital mechanics workflow."))
         return httpx.Response(404)
 
     events: list[Any] = []
@@ -143,7 +144,7 @@ async def test_failed_candidate_marks_source_unavailable_and_advances() -> None:
         if request.url.host == "example.com":
             return httpx.Response(404)
         if request.url.host == "example.org":
-            return html(page("Live", "Recovered content about orbital mechanics."))
+            return html(page("Live", "Recovered content about orbital mechanics research."))
         return httpx.Response(404)
 
     events: list[Any] = []
@@ -229,7 +230,7 @@ async def test_search_failure_fails_the_step_with_retry_budget_consumed() -> Non
 
 async def test_direct_fetch_step_collects_evidence() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        return html(page("Doc", "Official documentation sentence about releases."))
+        return html(page("Doc", "Official documentation sentence covers the release process."))
 
     events: list[Any] = []
     researcher, _ = make_researcher(handler, events)
@@ -246,7 +247,7 @@ async def test_direct_fetch_step_collects_evidence() -> None:
     assert len(outcome.evidence) == 1
     evidence = outcome.evidence[0]
     assert evidence.evidence_id == "f1:1"
-    assert evidence.claim == "Official documentation sentence about releases."
+    assert evidence.claim == "Official documentation sentence covers the release process."
     assert evidence.source_url == "https://example.org/doc"
     assert len(outcome.sources) == 1
     assert outcome.sources[0].status.value == "available"
@@ -346,3 +347,205 @@ async def test_empty_page_is_rejected_not_reported_as_evidence() -> None:
     rejected = [event for event in events if event.event is EventKind.EVIDENCE_REJECTED]
     assert len(rejected) == 1
     assert rejected[0].data == {"url": "https://example.com/empty"}
+
+
+async def test_nav_heavy_page_selects_query_relevant_sentences_only() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "api.tavily.com":
+            return httpx.Response(
+                200,
+                json={"results": [sr("Nav", "https://example.com/nav", "orbital mechanics")]},
+            )
+        return html(
+            page(
+                "Nav",
+                "Home. Products. Solutions. Orbital mechanics explains how satellites "
+                "stay in orbit. Launch costs keep falling as reusable rockets fly "
+                "more often. Alpha transfer trajectories follow orbital mechanics "
+                "principles closely.",
+            )
+        )
+
+    events: list[Any] = []
+    researcher, _ = make_researcher(handler, events)
+    outcome = await researcher.handle(research_step())
+
+    assert outcome.error is None
+    assert len(outcome.evidence) == 1
+    claim = outcome.evidence[0].claim
+    assert claim == (
+        "Orbital mechanics explains how satellites stay in orbit. "
+        "Alpha transfer trajectories follow orbital mechanics principles closely."
+    )
+    assert "Launch costs" not in claim
+    assert "Home" not in claim
+
+
+async def test_no_relevant_passage_is_rejected_without_zero_score_padding() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "api.tavily.com":
+            return httpx.Response(
+                200,
+                json={"results": [sr("Weather", "https://example.com/wx", "orbital mechanics")]},
+            )
+        return html(
+            page(
+                "Weather",
+                "Weather patterns shift gently across the region every season. "
+                "Tourism boards publish quarterly visitor statistics for coastal towns.",
+            )
+        )
+
+    events: list[Any] = []
+    researcher, _ = make_researcher(handler, events)
+    outcome = await researcher.handle(research_step())
+
+    assert outcome.error is None
+    assert outcome.evidence == []
+    rejected = [event for event in events if event.event is EventKind.EVIDENCE_REJECTED]
+    assert len(rejected) == 1
+    assert rejected[0].message == "no relevant passage"
+    assert rejected[0].data == {"url": "https://example.com/wx"}
+    assert kinds(events).count(EventKind.EVIDENCE_ADDED) == 0
+
+
+def test_select_passages_ties_break_by_position_deterministically() -> None:
+    terms = term_set("orbital mechanics")
+    text = (
+        "Orbital mechanics rules the first sentence here. "
+        "Something else entirely happens during daytime. "
+        "Orbital mechanics rules the second sentence here. "
+        "Orbital mechanics rules the third sentence here. "
+        "Orbital mechanics rules the fourth sentence here."
+    )
+
+    first = _select_passages(text, terms)
+    assert first == (
+        "Orbital mechanics rules the first sentence here. "
+        "Orbital mechanics rules the second sentence here. "
+        "Orbital mechanics rules the third sentence here."
+    )
+    assert "Something else" not in (first or "")
+    assert _select_passages(text, terms) == first
+
+
+def test_select_passages_caps_excerpt_length() -> None:
+    terms = term_set("orbital mechanics")
+
+    oversized = "Orbital mechanics " + " ".join(["alpha"] * 120) + " end."
+    assert _select_passages(oversized, terms) is None
+
+    good = "Orbital mechanics keeps satellites in stable orbits."
+    assert _select_passages(f"{oversized} {good}", terms) == good
+
+    first = "Orbital mechanics " + ", ".join(["unit"] * 40) + "."
+    second = "Orbital mechanics " + ", ".join(["block"] * 45) + "."
+    third = "Orbital mechanics " + ", ".join(["note"] * 30) + "."
+    joined = _select_passages(f"{first} {second} {third}", terms)
+    assert joined is not None
+    assert len(joined) <= 500
+    assert joined == f"{first} {third}"
+    assert "block" not in joined
+
+
+def test_run_on_menu_text_is_rejected() -> None:
+    terms = term_set("github repository contribution")
+    menu = (
+        "GitHub Education Learn how to move into your first professional role "
+        "and grow with documentation guides community events developer programs "
+        "sponsorship marketplace actions explore navigation footer links today "
+        "resources updates hub pages"
+    )
+    good = "The repository contribution data confirms steady GitHub activity."
+    assert _select_passages(f"{menu}. {good}", terms) == good
+
+
+def test_version_notation_stays_in_one_sentence() -> None:
+    terms = term_set("protocol rfc")
+    text = (
+        "The protocol's first full-featured iteration (v. 1.0) was documented "
+        "in RFC 1945 in 1996. As the standard evolved HTTP/2 added multiplexing support."
+    )
+    selected = _select_passages(text, terms)
+    assert selected is not None
+    assert "(v. 1.0) was documented in RFC 1945 in 1996." in selected
+
+
+def test_unbalanced_parenthesis_candidate_is_rejected() -> None:
+    terms = term_set("orbital mechanics")
+    text = (
+        "Orbital mechanics starts this fragment (draft. "
+        "Next orbital mechanics sentence finishes properly."
+    )
+    selected = _select_passages(text, terms)
+    assert selected == "Next orbital mechanics sentence finishes properly."
+
+
+def test_web_evidence_returns_typed_rejections() -> None:
+    common = {
+        "evidence_id": "e1",
+        "step_id": "s1",
+        "url": "https://example.com/p",
+        "title": None,
+        "query_terms": term_set("orbital mechanics"),
+        "retrieved_at": FIXED_TIME,
+    }
+    empty = _web_evidence(text="   ", **common)
+    assert isinstance(empty, Rejection)
+    assert empty.reason == "no extractable text in fetched page"
+
+    irrelevant = _web_evidence(
+        text="Weather patterns shift gently across the region every season.",
+        **common,
+    )
+    assert isinstance(irrelevant, Rejection)
+    assert irrelevant.reason == "no relevant passage"
+
+
+async def test_numeric_fact_extracted_from_selected_passage() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "api.tavily.com":
+            return httpx.Response(
+                200,
+                json={"results": [sr("Budget", "https://example.com/b", "orbital mechanics")]},
+            )
+        return html(
+            page("Budget", "Orbital mechanics funding reached $8.9B in the fiscal year.")
+        )
+
+    events: list[Any] = []
+    researcher, _ = make_researcher(handler, events)
+    outcome = await researcher.handle(research_step())
+
+    assert outcome.error is None
+    assert len(outcome.evidence) == 1
+    fact = outcome.evidence[0].numeric
+    assert fact is not None
+    assert fact.unit == "USD_B"
+    assert fact.value == 8.9e9
+
+
+async def test_numeric_not_extracted_from_unselected_sentence() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "api.tavily.com":
+            return httpx.Response(
+                200,
+                json={"results": [sr("Notes", "https://example.com/n", "orbital mechanics")]},
+            )
+        return html(
+            page(
+                "Notes",
+                "Orbital mechanics funding notes appear in this sentence. "
+                "The division produced 12% more output last year.",
+            )
+        )
+
+    events: list[Any] = []
+    researcher, _ = make_researcher(handler, events)
+    outcome = await researcher.handle(research_step())
+
+    assert outcome.error is None
+    assert len(outcome.evidence) == 1
+    evidence = outcome.evidence[0]
+    assert evidence.claim == "Orbital mechanics funding notes appear in this sentence."
+    assert evidence.numeric is None
